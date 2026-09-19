@@ -1,3 +1,4 @@
+import UserDropdown from '../components/UserDropdown';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -19,7 +20,7 @@ function Dashboard() {
              </div>
          </div>
 
-          {/* Menú Completo (Letras más grandes y mejor espaciado) */}
+          {/* Menú Completo  */}
           <nav className="p-3 space-y-1.5 text-sm">
             <button className="w-full text-left py-2.5 px-3 rounded bg-blue-900 font-bold flex items-center gap-3 text-blue-100">
               <span className="text-base">🏚️​</span> Inicio
@@ -30,7 +31,10 @@ function Dashboard() {
             <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
               <span className="text-base">📄</span> Perfiles de puesto
             </button>
-            <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+          
+            <button 
+              onClick={() => navigate('/nueva-solicitud')} 
+               className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200 transition-colors" >
               <span className="text-base">📑</span> Solicitudes de cobertura
             </button>
             <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
@@ -65,15 +69,9 @@ function Dashboard() {
         {/* Barra Superior */}
         <header className="bg-white border-b px-12 py-3 flex justify-end items-center gap-4">
           <button className="text-gray-500 text-base">🔔</button>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-900 font-bold flex items-center justify-center text-xs border border-blue-300">
-              CR
-            </div>
-            <div className="text-xs space-y-1">
-              <p className="font-bold text-gray-800 leading-none">Moly Valencia</p>
-              <p className="text-gray-500 text-[11px]">Jefe de Área</p>
-            </div>
-          </div>
+           {/*  componente desplegable */}
+            <UserDropdown /> 
+         
         </header>
 
         {/* Contenido Central */}
@@ -144,40 +142,40 @@ function Dashboard() {
                 <tbody className="divide-y divide-gray-100">
                   <tr>
                     <td className="py-2.5 font-bold text-gray-700">SC-001</td>
-                    <td className="py-2.5">Fiscalización</td>
-                    <td className="py-2.5">Técnico de Fiscalización</td>
+                    <td className="py-2.5">Gerencia de Administración Tributaria</td>
+                    <td className="py-2.5">Subgerencia de Fiscalización y Ejecución Coactiva</td>
                     <td className="py-2.5">31/08/2026</td>
                     <td className="py-2.5"><span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-bold">Validación...</span></td>
                     <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
                   </tr>
                   <tr>
                     <td className="py-2.5 font-bold text-gray-700">SC-002</td>
-                    <td className="py-2.5">Gerencia de Obras</td>
-                    <td className="py-2.5">Asistente Administrativo</td>
+                    <td className="py-2.5">Gerencia de Desarrollo Territorial e Infraestructura   </td>
+                    <td className="py-2.5">Subgerencia de Infraestructura</td>
                     <td className="py-2.5">30/08/2026</td>
                     <td className="py-2.5"><span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded font-bold">En revisión</span></td>
                     <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
                   </tr>
                   <tr>
                     <td className="py-2.5 font-bold text-gray-700">SC-003</td>
-                    <td className="py-2.5">Subgerencia de Seguridad</td>
-                    <td className="py-2.5">Personal de Apoyo</td>
+                    <td className="py-2.5">Gerencia de Desarrollo Económico</td>
+                    <td className="py-2.5">Subgerencia de Servicios Municipales</td>
                     <td className="py-2.5">29/08/2026</td>
                     <td className="py-2.5"><span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-bold">Validación...</span></td>
                     <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
                   </tr>
                   <tr>
                     <td className="py-2.5 font-bold text-gray-700">SC-004</td>
-                    <td className="py-2.5">Secretaría General</td>
-                    <td className="py-2.5">Analista Tributario</td>
+                    <td className="py-2.5">Gerencia de Servicios Municipales y Gestión Ambiental</td>
+                    <td className="py-2.5">Unidad de Tecnologías de Información</td>
                     <td className="py-2.5">28/08/2026</td>
                     <td className="py-2.5"><span className="bg-gray-100 text-gray-700 text-[10px] px-2 py-0.5 rounded font-bold">Pendiente</span></td>
                     <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
                   </tr>
                   <tr>
                     <td className="py-2.5 font-bold text-gray-700">SC-005</td>
-                    <td className="py-2.5">Oficina de Logística</td>
-                    <td className="py-2.5">Auxiliar de Almacén</td>
+                    <td className="py-2.5">Gerencia de Desarrollo Social</td>
+                    <td className="py-2.5">Unidad de Gestión de Recursos Humanos</td>
                     <td className="py-2.5">27/08/2026</td>
                     <td className="py-2.5"><span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-bold">Aprobado</span></td>
                     <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
