@@ -6,7 +6,7 @@ export default function UserDropdown() {
 
   return (
     <div className="relative">
-      {/* Botón de Perfil (Avatar + Nombres + Flecha Dropdown) */}
+      {/* Botón de Perfil  */}
       <button 
         onClick={() => setMenuAbierto(!menuAbierto)}
         className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none"
@@ -33,7 +33,7 @@ export default function UserDropdown() {
       {menuAbierto && (
         <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
           
-          {/* Encabezado del Menú (Móvil / Detalle rápido) */}
+          {/* Encabezado del Menú */}
           <div className="px-4 py-2 border-b border-gray-100">
             <p className="text-xs text-gray-400 font-medium">Sesión iniciada como</p>
             <p className="text-sm font-bold text-gray-700 truncate">carlos.ramirez@losaquijes.gob.pe</p>
@@ -42,10 +42,9 @@ export default function UserDropdown() {
           {/* Opciones del Menú */}
           <div className="py-1">
             <Link 
-              to="/expediente/mi-perfil" // Redirige a la Pantalla 06 (reutilizada)
+              to="/mi-perfil" 
               onClick={() => setMenuAbierto(false)}
-              className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-900 transition-colors"
-            >
+              className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-900 transition-colors" >
               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>

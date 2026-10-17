@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// 1. Importo los componentes ya creados anteriormente /src/components
+
 import Sidebar from '../components/sidebar'; 
 import UserDropdown from '../components/UserDropdown';
 
@@ -22,7 +22,7 @@ export default function NuevaSolicitudPOI() {
 return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
       
-      {/* Reuzo el sidebar creado */}
+      {/* sidebar reutilizado*/}
       <Sidebar />
 
       {/* Area central */}

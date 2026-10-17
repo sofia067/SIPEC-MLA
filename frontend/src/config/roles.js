@@ -1,0 +1,25 @@
+
+export const ROLES = {
+  ADMIN: 'ADMIN',
+  RRHH: 'ESPECIALISTA_RRHH',
+  JEFE_AREA: 'JEFE_AREA',
+  CANDIDATO: 'CANDIDATO'
+};
+
+
+export const PERMISOS = {
+  PERFIL_PUESTO: [ROLES.ADMIN, ROLES.RRHH, ROLES.JEFE_AREA],
+  SOLICITUDES: [ROLES.ADMIN, ROLES.RRHH, ROLES.JEFE_AREA],
+  VALIDACION_DOC: [ROLES.ADMIN, ROLES.RRHH],
+  CANDIDATOS_COMPATIBLES: [ROLES.ADMIN, ROLES.RRHH, ROLES.JEFE_AREA],
+  EVALUACIONES: [ROLES.ADMIN, ROLES.RRHH, ROLES.JEFE_AREA],
+  EXPEDIENTES: [ROLES.ADMIN, ROLES.RRHH, ROLES.JEFE_AREA],
+  AUDITORIA: [ROLES.ADMIN],
+  CONFIGURACION: [ROLES.ADMIN]
+};
+
+// Función auxiliar para verificar si un rol tiene acceso a un módulo
+export const tienePermiso = (rolUsuario, modulo) => {
+  if (!PERMISOS[modulo]) return false;
+  return PERMISOS[modulo].includes(rolUsuario);
+};

@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'; 
 
 export default function Sidebar() {
-  const navigate = useNavigate(); // 2. Hook para que funcione la navegación al cerrar sesión
+  const navigate = useNavigate(); 
 
   return ( 
     <aside className="w-64 bg-blue-950 text-white flex flex-col justify-between shrink-0">
@@ -21,20 +21,23 @@ export default function Sidebar() {
           <button onClick={() => navigate('/dashboard')} className="w-full text-left py-2.5 px-3 rounded bg-blue-900 font-bold flex items-center gap-3 text-blue-100">
             <span className="text-base">🏚️</span> Inicio
           </button>
-          <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+          <button onClick={() => navigate('/trabajadores')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
             <span className="text-base">👥</span> Trabajadores
           </button>
           <button onClick={() => navigate('/perfil-puesto')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
             <span className="text-base">📄</span> Perfiles de puesto
           </button>
-          <button onClick={() => navigate('/nueva-solicitud')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+          <button onClick={() => navigate('/solicitudes-cobertura')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
             <span className="text-base">📑</span> Solicitudes de cobertura
           </button>
-          <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+          <button onClick={() => navigate('/candidatos-compatibles')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+            <span className="text-base">🎯</span> Candidatos compatibles
+           </button>
+          <button onClick={() => navigate('/validacion-ocr')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
             <span className="text-base">🛡️</span> Validación documental
           </button>
-          <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-            <span className="text-base">📝</span> Evaluaciones
+          <button onClick={() => navigate('/evaluacion')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+            <span className="text-base">📝</span> Evaluacion
           </button>
           <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
             <span className="text-base">📊</span> Reportes
