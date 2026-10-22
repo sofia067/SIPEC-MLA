@@ -1,0 +1,29 @@
+{
+  "name": "sipec-mla-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:migrate": "node src/db/migrate.js",
+    "db:seed": "node src/db/seed.js",
+    "db:seed:roles": "node src/db/seed-role-users.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "multer": "^2.4.0",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.16.3",
+    "tesseract.js": "^7.0.0",
+    "zod": "^4.1.12"
+  }
+}
