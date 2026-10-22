@@ -11,6 +11,9 @@ import Trabajadores from './pages/Trabajadores';
 import ExpedienteTrabajador from './pages/ExpedienteTrabajador';
 import ValidacionOCR from './pages/ValidacionOCR';
 import Evaluacion from './pages/Evaluacion';
+import Informes from './pages/Informes';
+import Auditoria from './pages/Auditoria';
+import Configuracion from './pages/Configuracion';
 
 function App() {
   return (
@@ -29,6 +32,9 @@ function App() {
        <Route path="/validacion-ocr" element={<ValidacionOCR />} />
        <Route path="/evaluacion" element={<Evaluacion />} />
        <Route path="/evaluaciones" element={<Evaluacion />} />
+       <Route path="/informes" element={<Informes />} />
+       <Route path="/auditoria" element={<Auditoria />} />
+       <Route path="/configuracion" element={<Configuracion />} />
        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

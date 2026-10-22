@@ -47,13 +47,13 @@ function Dashboard() {
             <button onClick={() => navigate('/evaluacion')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
               <span className="text-base">📝</span> Evaluacion
             </button>
-            <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+            <button onClick={() => navigate('/informes')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
               <span className="text-base">📊</span> Reportes
             </button>
-            <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+            <button  onClick={() => navigate('/auditoria')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
               <span className="text-base">🔒</span> Auditoría
             </button>
-            <button className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
+            <button onClick={() => navigate('/configuracion')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
               <span className="text-base">⚙️</span> Configuración
             </button>
           </nav>

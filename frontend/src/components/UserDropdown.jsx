@@ -51,8 +51,9 @@ export default function UserDropdown() {
               <span>Mi Perfil</span>
             </Link>
 
-            <button 
-              onClick={() => alert("Módulo de Configuración en desarrollo")}
+            <Link
+              to="/configuracion"
+              onClick={() => setMenuAbierto(false)}
               className="w-full text-left flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-900 transition-colors"
             >
               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,7 +61,7 @@ export default function UserDropdown() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <span>Configuración</span>
-            </button>
+            </Link>
 
             <button 
               onClick={() => alert("Módulo de Seguridad/Contraseña en desarrollo")}
@@ -76,7 +77,7 @@ export default function UserDropdown() {
           {/* Separador y Opción Salir */}
           <div className="border-t border-gray-100 pt-1 mt-1">
             <Link 
-              to="/login" 
+              to="/" 
               onClick={() => setMenuAbierto(false)}
               className="flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors"
             >
