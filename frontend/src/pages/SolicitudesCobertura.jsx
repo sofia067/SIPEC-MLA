@@ -1,20 +1,147 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import UserDropdown from '../components/UserDropdown';
+import { apiRequest } from '../services/api';
+import { useAuth } from '../auth/AuthContext';
 
 export default function SolicitudesCobertura() {
   const navigate = useNavigate();
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const location = useLocation();
+  const { logout, user } = useAuth();
+  const [mostrarFormulario, setMostrarFormulario] = useState(location.pathname === '/nueva-solicitud');
   const [solicitudSeleccionada, setSolicitudSeleccionada] = useState(null);
+  const [solicitudEnEdicion, setSolicitudEnEdicion] = useState(null);
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState('');
+  const [actualizandoEstado, setActualizandoEstado] = useState(false);
+  const [error, setError] = useState('');
+  const [formulario, setFormulario] = useState({
+    department: '',
+    positionTitle: '',
+    reason: '',
+    priority: 'Media',
+    requiredBy: '',
+  });
 
-  // Lista de solicitudes (Historial)
-  const [solicitudes] = useState([
-    { id: 'SC-001', area: 'Gerencia de Administración Tributaria', puesto: 'Subgerencia de Fiscalización y Ejecución Coactiva', fecha: '31/08/2026', estado: 'Validación OCR', prioridad: 'Alta' },
-    { id: 'SC-002', area: 'Gerencia de Desarrollo Territorial e Infraestructura', puesto: 'Subgerencia de Infraestructura', fecha: '30/08/2026', estado: 'En revisión', prioridad: 'Media' },
-    { id: 'SC-003', area: 'Gerencia de Desarrollo Económico', puesto: 'Subgerencia de Servicios Municipales', fecha: '29/08/2026', estado: 'Validación OCR', prioridad: 'Alta' },
-    { id: 'SC-004', area: 'Gerencia de Servicios Municipales y Gestión Ambiental', puesto: 'Unidad de Tecnologías de Información', fecha: '28/08/2026', estado: 'Pendiente', prioridad: 'Baja' },
-    { id: 'SC-005', area: 'Gerencia de Desarrollo Social', puesto: 'Unidad de Gestión de Recursos Humanos', fecha: '27/08/2026', estado: 'Aprobado', prioridad: 'Alta' },
-  ]);
+  const cargarSolicitudes = async () => {
+    setCargando(true);
+    setError('');
+    try {
+      const { requests } = await apiRequest('/requests');
+      setSolicitudes(requests.map((request) => ({
+        ...request,
+        requestId: request.id,
+        id: request.code,
+        area: request.department,
+        puesto: request.position_title,
+        fecha: request.created_at,
+        estado: request.status,
+        prioridad: request.priority || 'Media',
+      })));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarSolicitudes();
+  }, []);
+
+  useEffect(() => {
+    setMostrarFormulario(location.pathname === '/nueva-solicitud');
+  }, [location.pathname]);
+
+  const guardarSolicitud = async (event) => {
+    event.preventDefault();
+    setGuardando(true);
+    setError('');
+    try {
+      await apiRequest(solicitudEnEdicion ? `/requests/${solicitudEnEdicion.requestId}` : '/requests', {
+        method: solicitudEnEdicion ? 'PATCH' : 'POST',
+        body: JSON.stringify(formulario),
+      });
+      setFormulario({ department: '', positionTitle: '', reason: '', priority: 'Media', requiredBy: '' });
+      setSolicitudEnEdicion(null);
+      setMostrarFormulario(false);
+      navigate('/solicitudes-cobertura', { replace: true });
+      await cargarSolicitudes();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const editarSolicitud = (solicitud) => {
+    setSolicitudEnEdicion(solicitud);
+    setSolicitudSeleccionada(null);
+    setFormulario({
+      department: solicitud.area,
+      positionTitle: solicitud.puesto,
+      reason: solicitud.reason,
+      priority: solicitud.prioridad,
+      requiredBy: solicitud.required_by ? solicitud.required_by.slice(0, 10) : '',
+    });
+    setError('');
+    setMostrarFormulario(true);
+  };
+
+  const eliminarSolicitud = async (solicitud) => {
+    if (!window.confirm(`¿Eliminar la solicitud ${solicitud.id}? Esta acción solo es posible si está pendiente y no tiene documentos, evaluaciones ni asignaciones asociados.`)) return;
+    setEliminando(solicitud.requestId);
+    setError('');
+    try {
+      await apiRequest(`/requests/${solicitud.requestId}`, { method: 'DELETE' });
+      if (solicitudSeleccionada?.requestId === solicitud.requestId) setSolicitudSeleccionada(null);
+      await cargarSolicitudes();
+    } catch (requestError) {
+      if (solicitudSeleccionada?.requestId === solicitud.requestId) setSolicitudSeleccionada(null);
+      setError(requestError.message);
+    } finally {
+      setEliminando('');
+    }
+  };
+
+  const cambiarEstadoSolicitud = async (status) => {
+    setActualizandoEstado(true);
+    setError('');
+    try {
+      const { request } = await apiRequest(`/requests/${solicitudSeleccionada.requestId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      setSolicitudSeleccionada((current) => current
+        ? { ...current, estado: request.status }
+        : current);
+      await cargarSolicitudes();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setActualizandoEstado(false);
+    }
+  };
+
+  const cancelarFormulario = () => {
+    setFormulario({ department: '', positionTitle: '', reason: '', priority: 'Media', requiredBy: '' });
+    setSolicitudEnEdicion(null);
+    setMostrarFormulario(false);
+    if (location.pathname === '/nueva-solicitud') navigate('/solicitudes-cobertura');
+  };
+
+  const estadoLabel = (status) => ({
+    pending: 'Pendiente',
+    in_review: 'En revisión',
+    approved: 'Aprobado',
+    rejected: 'Rechazado',
+    completed: 'Completado',
+  }[status] ?? status);
+  const fechaLabel = (date) => date
+    ? new Intl.DateTimeFormat('es-PE').format(new Date(date.length === 10 ? `${date}T12:00:00` : date))
+    : '—';
 
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
@@ -56,7 +183,14 @@ export default function SolicitudesCobertura() {
         </div>
 
         <div className="p-3 border-t border-blue-900">
-          <button onClick={() => navigate('/')} className="w-full text-left py-2 px-3 rounded hover:bg-red-900/50 text-sm font-medium text-red-300 flex items-center gap-2">
+          <button onClick={async () => {
+            try {
+              await logout();
+              navigate('/', { replace: true });
+            } catch (logoutError) {
+              setError(logoutError.message);
+            }
+          }} className="w-full text-left py-2 px-3 rounded hover:bg-red-900/50 text-sm font-medium text-red-300 flex items-center gap-2">
             ❌ Cerrar sesión
           </button>
         </div>
@@ -64,12 +198,25 @@ export default function SolicitudesCobertura() {
 
       {/* Área Principal */}
       <div className="flex-1 flex flex-col overflow-y-auto">
-        <header className="bg-white border-b px-8 py-3 flex justify-end items-center gap-4">
-          <button className="text-gray-500 text-base">🔔</button>
-          <UserDropdown />
+        <header className="bg-white border-b px-8 py-3 flex justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-blue-950">SIPEC-MLA</h1>
+            <span className="text-xs bg-blue-100 text-blue-800 font-medium px-2.5 py-0.5 rounded-full">
+              Solicitudes de Cobertura
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="text-gray-500 text-base">🔔</button>
+            <UserDropdown />
+          </div>
         </header>
 
         <main className="p-8 space-y-6">
+          {error && (
+            <div role="alert" className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
           
           {!mostrarFormulario ? (
             /* Vista 1: Tabla de Historial General */
@@ -107,33 +254,51 @@ export default function SolicitudesCobertura() {
                         <td className="py-3 font-bold text-blue-950">{sol.id}</td>
                         <td className="py-3 text-gray-700">{sol.area}</td>
                         <td className="py-3 font-medium text-gray-900">{sol.puesto}</td>
-                        <td className="py-3 text-gray-500">{sol.fecha}</td>
+                        <td className="py-3 text-gray-500">{fechaLabel(sol.fecha)}</td>
                         <td className="py-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            sol.prioridad === 'Alta' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {sol.prioridad}
-                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600">{sol.prioridad}</span>
                         </td>
                         <td className="py-3">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                            sol.estado === 'Aprobado' ? 'bg-emerald-100 text-emerald-800' :
-                            sol.estado === 'Validación OCR' ? 'bg-amber-100 text-amber-800' :
-                            sol.estado === 'En revisión' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'
+                            sol.estado === 'approved' || sol.estado === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                            sol.estado === 'in_review' ? 'bg-blue-100 text-blue-800' :
+                            sol.estado === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                           }`}>
-                            {sol.estado}
+                            {estadoLabel(sol.estado)}
                           </span>
                         </td>
                         <td className="py-3 text-right">
-                          <button
-                            onClick={() => setSolicitudSeleccionada(sol)}
-                            className="text-blue-900 font-bold hover:underline"
-                          >
-                            Ver detalle
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => setSolicitudSeleccionada(sol)}
+                              className="text-blue-900 font-bold hover:underline"
+                            >
+                              Ver detalle
+                            </button>
+                            {sol.estado === 'pending' && ['admin', 'hr_specialist'].includes(user?.role) && (
+                              <>
+                                <button onClick={() => editarSolicitud(sol)} className="font-semibold text-black hover:underline">
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => eliminarSolicitud(sol)}
+                                  disabled={eliminando === sol.requestId}
+                                  className="font-semibold text-red-700 hover:underline disabled:text-gray-400"
+                                >
+                                  {eliminando === sol.requestId ? 'Eliminando...' : 'Eliminar'}
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
+                    {!cargando && solicitudes.length === 0 && (
+                      <tr><td colSpan="7" className="py-6 text-center text-gray-500">No hay solicitudes registradas en la base de datos.</td></tr>
+                    )}
+                    {cargando && (
+                      <tr><td colSpan="7" className="py-6 text-center text-gray-500">Cargando solicitudes...</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -142,70 +307,75 @@ export default function SolicitudesCobertura() {
             /* Vista 2: Formulario de Nueva Solicitud */
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
-                <h2 className="text-xl font-bold text-gray-900">Nueva Solicitud de Cobertura</h2>
+                <h2 className="text-xl font-bold text-gray-900">{solicitudEnEdicion ? `Editar solicitud ${solicitudEnEdicion.id}` : 'Nueva Solicitud de Cobertura'}</h2>
                 <button 
-                  onClick={() => setMostrarFormulario(false)}
+                  onClick={cancelarFormulario}
                   className="text-xs text-blue-900 hover:underline font-semibold flex items-center gap-1"
                 >
                   ← Volver al historial
                 </button>
               </div>
 
-              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm grid grid-cols-3 gap-6">
-                <div className="col-span-2 space-y-4 text-xs">
+              <form onSubmit={guardarSolicitud} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-5 text-sm md:col-span-2">
                   <div>
-                    <label className="font-semibold text-gray-700 block mb-1">Área Solicitante</label>
-                    <select className="w-full border p-2 rounded-lg">
-                      <option>Gerencia de Administración Tributaria</option>
-                      <option>Gerencia de Servicios Municipales y Gestión Ambiental</option>
-                      <option>Oficina de Administración y Finanzas</option>
+                    <label className="font-semibold text-gray-700 block mb-1.5">Área Solicitante</label>
+                    <input required minLength="2" maxLength="160" value={formulario.department}
+                      onChange={(event) => setFormulario({ ...formulario, department: event.target.value })}
+                      className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-900" placeholder="Nombre del área" />
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-1.5">Puesto a cubrir</label>
+                    <input required minLength="2" maxLength="160" value={formulario.positionTitle}
+                      onChange={(event) => setFormulario({ ...formulario, positionTitle: event.target.value })}
+                      className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-900" placeholder="Nombre del puesto" />
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-1.5">Motivo de la solicitud</label>
+                    <textarea required minLength="10" maxLength="4000" rows="4" value={formulario.reason}
+                      onChange={(event) => setFormulario({ ...formulario, reason: event.target.value })}
+                      className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-900" placeholder="Describe la necesidad de cobertura..." />
+                  </div>
+                  <div>
+                    <label htmlFor="request-priority" className="font-semibold text-gray-700 block mb-1.5">Prioridad</label>
+                    <select id="request-priority" required value={formulario.priority}
+                      onChange={(event) => setFormulario({ ...formulario, priority: event.target.value })}
+                      className="w-full border border-gray-300 p-2.5 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-900">
+                      <option value="Alta">Alta</option>
+                      <option value="Media">Media</option>
+                      <option value="Baja">Baja</option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="font-semibold text-gray-700 block mb-1">Puesto a cubrir</label>
-                    <select className="w-full border p-2 rounded-lg">
-                      <option>Técnico de Fiscalización</option>
-                      <option>Serenazgo Operativo</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="font-semibold text-gray-700 block mb-1">Motivo de la solicitud</label>
-                    <input type="text" placeholder="Ej. Permiso / Ausencia o Cubrir vacante temporal" className="w-full border p-2 rounded-lg" />
-                  </div>
-
-                  <div>
-                    <label className="font-semibold text-gray-700 block mb-1">Descripción (opcional)</label>
-                    <textarea rows="3" className="w-full border p-2 rounded-lg" placeholder="Trabajador titular con descanso médico por 15 días..."></textarea>
+                    <label className="font-semibold text-gray-700 block mb-1.5">Fecha requerida (opcional)</label>
+                    <input type="date" value={formulario.requiredBy}
+                      onChange={(event) => setFormulario({ ...formulario, requiredBy: event.target.value })}
+                      className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-900" />
                   </div>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3 text-xs h-fit">
+                <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 space-y-4 text-sm h-fit">
                   <h3 className="font-bold text-gray-800 border-b pb-2">Resumen</h3>
-                  <p><strong>Puesto:</strong> Técnico de Fiscalización</p>
-                  <p><strong>Área:</strong> Fiscalización</p>
-                  <p><strong>Prioridad:</strong> Alta</p>
+                  <p><strong>Puesto:</strong> {formulario.positionTitle || '—'}</p>
+                  <p><strong>Área:</strong> {formulario.department || '—'}</p>
 
                   <div className="pt-3 space-y-2">
-                    <button 
-                      onClick={() => {
-                        alert("Solicitud registrada con éxito");
-                        setMostrarFormulario(false);
-                      }}
-                      className="w-full bg-blue-950 text-white py-2 rounded-lg font-bold hover:bg-blue-900"
+                    <button type="submit" disabled={guardando}
+                      className="w-full bg-blue-950 text-white py-2.5 rounded-lg font-bold hover:bg-blue-900 disabled:opacity-60"
                     >
-                      Guardar solicitud
+                      {guardando ? 'Guardando...' : 'Guardar solicitud'}
                     </button>
-                    <button 
-                      onClick={() => setMostrarFormulario(false)}
-                      className="w-full bg-white border py-2 rounded-lg font-bold text-gray-600 hover:bg-gray-100"
+                    <button type="button"
+                      onClick={cancelarFormulario}
+                      className="w-full bg-white border py-2.5 rounded-lg font-bold text-gray-600 hover:bg-gray-100"
                     >
                       Cancelar
                     </button>
                   </div>
                 </div>
-              </div>
+              </form>
             </div>
           )}
 
@@ -252,7 +422,7 @@ export default function SolicitudesCobertura() {
               </div>
               <div>
                 <dt className="text-xs font-semibold text-gray-500">Fecha</dt>
-                <dd className="mt-1 text-gray-800">{solicitudSeleccionada.fecha}</dd>
+                <dd className="mt-1 text-gray-800">{fechaLabel(solicitudSeleccionada.fecha)}</dd>
               </div>
               <div>
                 <dt className="text-xs font-semibold text-gray-500">Prioridad</dt>
@@ -260,11 +430,64 @@ export default function SolicitudesCobertura() {
               </div>
               <div>
                 <dt className="text-xs font-semibold text-gray-500">Estado</dt>
-                <dd className="mt-1 text-gray-800">{solicitudSeleccionada.estado}</dd>
+                <dd className="mt-1 text-gray-800">{estadoLabel(solicitudSeleccionada.estado)}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold text-gray-500">Motivo</dt>
+                <dd className="mt-1 whitespace-pre-line text-gray-800">{solicitudSeleccionada.reason}</dd>
               </div>
             </dl>
 
-            <div className="mt-6 flex justify-end border-t pt-4">
+            {error && (
+              <p role="alert" className="mt-4 rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-between border-t pt-4">
+              {['admin', 'hr_specialist'].includes(user?.role) ? (
+                <div className="flex flex-wrap gap-2">
+                  {['pending', 'in_review'].includes(solicitudSeleccionada.estado) && (
+                    <button
+                      type="button"
+                      onClick={() => cambiarEstadoSolicitud('approved')}
+                      disabled={actualizandoEstado}
+                      className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+                    >
+                      {actualizandoEstado ? 'Actualizando...' : 'Aprobar y publicar'}
+                    </button>
+                  )}
+                  {solicitudSeleccionada.estado === 'approved' && (
+                    <button
+                      type="button"
+                      onClick={() => cambiarEstadoSolicitud('in_review')}
+                      disabled={actualizandoEstado}
+                      className="rounded-lg border border-amber-400 px-4 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-50 disabled:cursor-not-allowed disabled:text-gray-400"
+                    >
+                      {actualizandoEstado ? 'Actualizando...' : 'Retirar del portal'}
+                    </button>
+                  )}
+                  {solicitudSeleccionada.estado === 'pending' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => editarSolicitud(solicitudSeleccionada)}
+                        className="rounded-lg border border-gray-400 px-4 py-2 text-xs font-semibold text-black hover:bg-gray-100"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => eliminarSolicitud(solicitudSeleccionada)}
+                        disabled={eliminando === solicitudSeleccionada.requestId}
+                        className="rounded-lg border border-red-300 px-4 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:text-gray-400"
+                      >
+                        {eliminando === solicitudSeleccionada.requestId ? 'Eliminando...' : 'Eliminar'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : <span />}
               <button
                 type="button"
                 onClick={() => setSolicitudSeleccionada(null)}

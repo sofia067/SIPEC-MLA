@@ -8,6 +8,8 @@ import { modulesRepository } from '../repositories/modules-repository.js';
 import { requestRepository } from '../repositories/request-repository.js';
 import { hashPassword } from '../security/password.js';
 import { documentService } from '../services/document-service.js';
+import { extractText } from '../services/ocr-service.js';
+import { scoreResumeMatch } from '../services/match-scoring.js';
 
 const idSchema = z.uuid();
 const nonEmptyText = (max) => z.string().trim().min(1).max(max);
@@ -31,6 +33,13 @@ const profileSchema = z.object({
   level: nonEmptyText(80),
   principalRequirements: z.string().trim().max(4000).default(''),
   description: z.string().trim().max(4000).default(''),
+  profileCode: z.string().trim().max(40).default(''),
+  remuneration: z.union([z.literal(''), z.coerce.number().min(0).max(9999999999.99)]).optional().transform((value) => value === '' ? null : value),
+  education: z.string().trim().max(4000).default(''),
+  generalExperience: z.string().trim().max(2000).default(''),
+  specificExperience: z.string().trim().max(2000).default(''),
+  technicalKnowledge: z.string().trim().max(8000).default(''),
+  functions: z.array(nonEmptyText(2000)).max(60).default([]),
   status: z.enum(['active', 'inactive']).default('active'),
   competencies: z.array(competencySchema).max(30).default([]),
 });
@@ -41,6 +50,7 @@ const requestDetailsSchema = z.object({
   department: nonEmptyText(160),
   positionTitle: nonEmptyText(160),
   reason: z.string().trim().min(10).max(4000),
+  priority: z.enum(['Alta', 'Media', 'Baja']).default('Media'),
   requiredBy: z.union([z.literal(''), z.iso.date()]).optional().transform((value) => value || null),
 });
 const documentSchema = z.object({
@@ -83,6 +93,23 @@ const updateUserSchema = z.object({
   areaName: z.string().trim().max(160).default(''),
   password: z.union([z.literal(''), z.string().min(12).max(256)]).optional().default(''),
   isActive: z.boolean(),
+});
+const applicationSettingsSchema = z.object({
+  anonymizationEnabled: z.boolean(),
+  ocrConfidenceThreshold: z.number().int().min(0).max(100),
+});
+const blindCandidateSchema = z.object({
+  requestId: idSchema,
+  fullName: nonEmptyText(160),
+  documentNumber: nonEmptyText(24),
+  email: z.union([z.literal(''), z.email().max(254)]).optional().default(''),
+  phone: z.string().trim().max(40).optional().default(''),
+});
+const blindExamSchema = z.object({
+  answers: z.array(z.union([z.number().int(), z.string().max(2000)])).length(20),
+});
+const blindExamReviewSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
 });
 
 const requireId = (rawId) => {
@@ -206,6 +233,78 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
+  router.get('/blind-selection/banks', authorize('admin', 'hr_specialist'), async (req, res) => {
+    res.json({ banks: modulesRepository.getBlindSelectionBanks() });
+  });
+  router.get('/blind-selection/candidates', authorize('admin', 'hr_specialist'), async (req, res) => {
+    res.json({ candidates: await modulesRepository.listBlindSelectionCandidates() });
+  });
+  router.post('/blind-selection/candidates/:id/match', authorize('admin', 'hr_specialist'), async (req, res, next) => {
+    try {
+      const candidateId = requireId(req.params.id);
+      const candidate = await modulesRepository.getBlindCandidateMatchInput(candidateId);
+      if (!candidate) throw new AppError(404, 'CANDIDATE_NOT_FOUND', 'No se encontró al postulante.');
+      if (!candidate.resume_file_path) {
+        throw new AppError(404, 'RESUME_NOT_AVAILABLE', 'Este postulante no tiene un CV adjunto para calcular el match.');
+      }
+
+      let resumeText;
+      try {
+        resumeText = await extractText(candidate.resume_file_path, candidate.resume_file_mime);
+      } catch (error) {
+        console.error('No se pudo extraer texto para calcular el match del CV:', error);
+        throw new AppError(422, 'MATCH_EXTRACTION_FAILED', 'No se pudo leer el CV. Verifica el archivo e inténtalo nuevamente.');
+      }
+      const matchResult = scoreResumeMatch(candidate, resumeText);
+      const match = await modulesRepository.updateBlindCandidateMatch(candidateId, matchResult, req.user.id);
+      if (!match) throw new AppError(404, 'CANDIDATE_NOT_FOUND', 'No se encontró al postulante.');
+      return res.json({ match });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.get('/blind-selection/candidates/:id/resume', authorize('admin', 'hr_specialist'), async (req, res, next) => {
+    try {
+      const file = await modulesRepository.getRevealedCandidateResume(requireId(req.params.id));
+      if (!file) throw new AppError(404, 'RESUME_NOT_AVAILABLE', 'El CV no está disponible hasta que se revele la identidad del postulante.');
+      return res.download(file.file_path, file.file_name, (error) => {
+        if (error) next(error);
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.post('/blind-selection/candidates', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const input = blindCandidateSchema.parse(req.body);
+    const candidate = await modulesRepository.createBlindSelectionCandidate(input, req.user.id);
+    res.status(201).json({ candidate });
+  });
+  router.post('/blind-selection/candidates/:id/exam', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const { answers } = blindExamSchema.parse(req.body);
+    const exam = await modulesRepository.submitBlindSelectionExam(
+      requireId(req.params.id),
+      answers,
+      req.user.id,
+    );
+    res.status(201).json({ exam });
+  });
+  router.get('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const exam = await findOr404(
+      () => modulesRepository.getBlindSelectionExamForReview(requireId(req.params.id)),
+      'No se encontró un examen para revisar.',
+    );
+    res.json({ exam });
+  });
+  router.patch('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const { status } = blindExamReviewSchema.parse(req.body);
+    const result = await modulesRepository.reviewBlindSelectionExam(
+      requireId(req.params.id),
+      status,
+      req.user.id,
+    );
+    res.json(result);
+  });
+
   router.post('/documents/:id/file', authorize('admin', 'hr_specialist'), validateIdParam, uploadDocument, async (req, res) => {
     const document = await documentService.attachFile(req.params.id, req.file, req.user.id);
     res.status(202).json({ document });
@@ -240,6 +339,9 @@ export function createModuleRouter() {
     const type = z.enum(['requests', 'workers', 'evaluations']).parse(req.query.type ?? 'requests');
     res.json({ type, rows: await modulesRepository.getReportData(type) });
   });
+  router.get('/reports/kpis', authorize('admin', 'hr_specialist'), async (req, res) => {
+    res.json(await modulesRepository.getReportKpis());
+  });
   router.get('/reports/:type.csv', authorize('admin', 'hr_specialist'), async (req, res) => {
     const type = z.enum(['requests', 'workers', 'evaluations']).parse(req.params.type);
     const rows = await modulesRepository.getReportData(type);
@@ -258,6 +360,13 @@ export function createModuleRouter() {
 
   router.get('/settings/users', authorize('admin'), async (req, res) => {
     res.json({ users: await modulesRepository.listUsers() });
+  });
+  router.get('/settings', authorize('admin'), async (req, res) => {
+    res.json({ settings: await modulesRepository.getApplicationSettings() });
+  });
+  router.put('/settings', authorize('admin'), async (req, res) => {
+    const input = applicationSettingsSchema.parse(req.body);
+    res.json({ settings: await modulesRepository.updateApplicationSettings(input, req.user.id) });
   });
   router.post('/settings/users', authorize('admin'), async (req, res) => {
     const input = createUserSchema.parse(req.body);

@@ -2,7 +2,7 @@ import { pool } from '../db/pool.js';
 import { AppError } from '../errors/app-error.js';
 
 export const requestRepository = {
-  async create({ department, positionTitle, reason, requiredBy, userId }) {
+  async create({ department, positionTitle, reason, priority, requiredBy, userId }) {
     const client = await pool.connect();
 
     try {
@@ -23,10 +23,10 @@ export const requestRepository = {
       const code = `SC-${String(sequenceResult.rows[0].value).padStart(5, '0')}`;
       const requestResult = await client.query(
         `INSERT INTO coverage_requests
-           (code, department_id, position_id, reason, required_by, requested_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, code, status, created_at`,
-        [code, departmentResult.rows[0].id, positionResult.rows[0].id, reason, requiredBy, userId],
+           (code, department_id, position_id, reason, priority, required_by, requested_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, code, status, priority, created_at`,
+        [code, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priority, requiredBy, userId],
       );
       const request = requestResult.rows[0];
       await client.query(
@@ -47,7 +47,7 @@ export const requestRepository = {
   async listRecent(limit = 10) {
     const result = await pool.query(
       `SELECT r.id, r.code, d.name AS department, p.title AS position_title,
-              r.status, r.required_by, r.created_at, u.display_name AS requested_by
+              r.status, r.priority, r.required_by, r.created_at, u.display_name AS requested_by
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
@@ -62,7 +62,7 @@ export const requestRepository = {
   async listAll() {
     const result = await pool.query(
       `SELECT r.id, r.code, r.department_id, r.position_id, d.name AS department,
-              p.title AS position_title, r.reason, r.status, r.required_by, r.created_at,
+              p.title AS position_title, r.reason, r.status, r.priority, r.required_by, r.created_at,
               r.reviewed_at, u.display_name AS requested_by
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
@@ -73,15 +73,29 @@ export const requestRepository = {
     return result.rows;
   },
 
+  async listPublicOpenings() {
+    const result = await pool.query(
+      `SELECT r.id, r.code, p.title AS position_title, d.name AS department,
+              p.description, p.education, p.general_experience, p.specific_experience,
+              p.technical_knowledge
+       FROM coverage_requests r
+       JOIN departments d ON d.id = r.department_id
+       JOIN position_profiles p ON p.id = r.position_id
+       WHERE r.status = 'approved'
+       ORDER BY r.updated_at DESC, p.title`,
+    );
+    return result.rows;
+  },
+
   async updateStatus(id, status, userId) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const result = await client.query(
-        `UPDATE coverage_requests SET status = $2, reviewed_by = $3, reviewed_at = now(), updated_at = now()
+        `UPDATE coverage_requests SET status = $2::request_status, reviewed_by = $3, reviewed_at = now(), updated_at = now()
          WHERE id = $1 AND (
-           (status = 'pending' AND $2 IN ('in_review', 'approved', 'rejected')) OR
-           (status = 'in_review' AND $2 IN ('approved', 'rejected', 'pending'))
+           (status = 'pending' AND $2::request_status IN ('in_review', 'approved', 'rejected')) OR
+           (status = 'in_review' AND $2::request_status IN ('approved', 'rejected', 'pending'))
          )
          RETURNING id, code, status, updated_at`,
         [id, status, userId],
@@ -103,7 +117,7 @@ export const requestRepository = {
     }
   },
 
-  async updatePending(id, { department, positionTitle, reason, requiredBy }, userId) {
+  async updatePending(id, { department, positionTitle, reason, priority, requiredBy }, userId) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -119,10 +133,10 @@ export const requestRepository = {
       );
       const result = await client.query(
         `UPDATE coverage_requests SET department_id = $2, position_id = $3, reason = $4,
-           required_by = $5, updated_at = now()
+           priority = $5, required_by = $6, updated_at = now()
          WHERE id = $1 AND status = 'pending'
          RETURNING id, code, status, updated_at`,
-        [id, departmentResult.rows[0].id, positionResult.rows[0].id, reason, requiredBy],
+        [id, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priority, requiredBy],
       );
       if (result.rowCount) {
         await client.query(

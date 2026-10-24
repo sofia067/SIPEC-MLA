@@ -6,25 +6,51 @@ import UserDropdown from '../components/UserDropdown';
 export default function CandidatosCompatibles() {
   const navigate = useNavigate();
 
-  // Solicitud seleccionada actualmente
+  const solicitudes = [
+    {
+      codigo: 'SC-001',
+      puesto: 'Técnico de Fiscalización y Coactiva',
+      prioridad: 'Prioridad Alta',
+      descripcion: 'Apoyar las acciones de fiscalización municipal y el seguimiento de procedimientos de ejecución coactiva.',
+      criterios: 'Competencias técnicas, años de experiencia y grado académico acreditado.',
+    },
+    {
+      codigo: 'SC-002',
+      puesto: 'Subgerente de Infraestructura',
+      prioridad: 'Prioridad Media',
+      descripcion: 'Coordinar la planificación, ejecución y supervisión de proyectos de infraestructura municipal.',
+      criterios: 'Formación en ingeniería o arquitectura, experiencia en obras públicas y gestión de proyectos.',
+    },
+    {
+      codigo: 'SC-003',
+      puesto: 'Inspector de Servicios Municipales',
+      prioridad: 'Prioridad Media',
+      descripcion: 'Realizar inspecciones de campo y verificar el cumplimiento de las normas y servicios municipales.',
+      criterios: 'Experiencia en inspección de campo, conocimiento normativo y comunicación efectiva.',
+    },
+  ];
+
   const [solicitudFiltro, setSolicitudFiltro] = useState('SC-001');
   const [candidatoSeleccionado, setCandidatoSeleccionado] = useState(null);
+  const solicitudActiva = solicitudes.find((solicitud) => solicitud.codigo === solicitudFiltro);
 
-  // Datos ANÓNIMOS para Selección Ciega (Mock Data)
+  // Datos de demostración: no representan postulaciones reales.
   const [candidatos] = useState([
     {
       codigo: 'Postulante #001',
-      puestoActual: 'Auxiliar Administrativo',
+      solicitud: 'SC-001',
+      puestoActual: 'Inspector Operativo',
       experiencia: '4 años en gestión pública',
-      estudios: 'Técnico en Administración',
+      estudios: 'Técnico en Administración Pública',
       match: 95,
       estado: 'Sugerido',
-      puntosFuertes: ['Cumple con el 100% de la experiencia requerida', 'Título técnico registrado en MINEDU', 'Licencia de conducir B2 vigente'],
+      puntosFuertes: ['Experiencia en fiscalización municipal', 'Formación técnica relacionada', 'Conocimiento de procedimientos administrativos'],
       observaciones: []
     },
     {
       codigo: 'Postulante #002',
-      puestoActual: 'Inspector Operativo',
+      solicitud: 'SC-001',
+      puestoActual: 'Asistente de Fiscalización',
       experiencia: '3 años en fiscalización de campo',
       estudios: 'Egresado Técnico',
       match: 84,
@@ -34,15 +60,28 @@ export default function CandidatosCompatibles() {
     },
     {
       codigo: 'Postulante #003',
-      puestoActual: 'Personal Operativo',
+      solicitud: 'SC-003',
+      puestoActual: 'Personal Operativo Municipal',
       experiencia: '2 años en servicios de campo',
       estudios: 'Secundaria Completa',
       match: 68,
       estado: 'Pendiente',
       puntosFuertes: ['Conocimiento operativo de la jurisdicción local'],
       observaciones: ['Falta 1 año de experiencia específica según perfil requerido']
+    },
+    {
+      codigo: 'Postulante #004',
+      solicitud: 'SC-002',
+      puestoActual: 'Asistente de Obras',
+      experiencia: '5 años en supervisión de obras',
+      estudios: 'Bachiller en Ingeniería Civil',
+      match: 88,
+      estado: 'En revisión',
+      puntosFuertes: ['Experiencia en obras públicas', 'Formación relacionada al puesto'],
+      observaciones: ['Pendiente verificar certificados de especialización']
     }
   ]);
+  const candidatosFiltrados = candidatos.filter((candidato) => candidato.solicitud === solicitudFiltro);
 
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
@@ -75,14 +114,19 @@ export default function CandidatosCompatibles() {
             {/* Selector de Solicitud de Cobertura */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
               <label className="font-semibold text-gray-700">Solicitud activa:</label>
-              <select 
+              <select
                 value={solicitudFiltro}
-                onChange={(e) => setSolicitudFiltro(e.target.value)}
+                onChange={(e) => {
+                  setSolicitudFiltro(e.target.value);
+                  setCandidatoSeleccionado(null);
+                }}
                 className="w-full sm:w-auto border bg-white px-3 py-1.5 rounded-lg font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
               >
-                <option value="SC-001">SC-001 | Técnico de Fiscalización (Prioridad Alta)</option>
-                <option value="SC-002">SC-002 | Subgerente de Infraestructura</option>
-                <option value="SC-003">SC-003 | Inspector de Servicios Municipales</option>
+                {solicitudes.map((solicitud) => (
+                  <option key={solicitud.codigo} value={solicitud.codigo}>
+                    {solicitud.codigo} | {solicitud.puesto} ({solicitud.prioridad})
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -93,7 +137,7 @@ export default function CandidatosCompatibles() {
               <span className="text-xl">🛡️</span>
               <div>
                 <p className="font-bold">Principio de Imparcialidad y Meritocracia</p>
-                <p className="text-[11px] text-amber-700">Los datos personales (nombre, género, foto, edad) han sido ocultados automáticamente para evitar favoritismos durante la preselección.</p>
+                <p className="text-[11px] text-amber-700">Esta demostración usa postulantes y resultados ficticios; no muestra datos personales reales.</p>
               </div>
             </div>
           </div>
@@ -102,21 +146,26 @@ export default function CandidatosCompatibles() {
           <div className="bg-white border border-gray-200 border-l-4 border-l-blue-900 p-5 rounded-xl shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div className="space-y-1">
               <span className="text-[10px] bg-blue-50 text-blue-900 uppercase font-bold px-2 py-0.5 rounded">
-                Requerimiento Activo
+                Requerimiento Activo · {solicitudActiva.codigo}
               </span>
-              <h3 className="text-lg font-bold text-gray-900">Puesto: Técnico de Fiscalización y Coactiva</h3>
-              <p className="text-xs text-gray-600">Criterios de evaluación: Competencias técnicas, años de experiencia y grado académico acreditado.</p>
+              <h3 className="text-lg font-bold text-gray-900">Puesto: {solicitudActiva.puesto}</h3>
+              <p className="text-sm text-gray-700">{solicitudActiva.descripcion}</p>
+              <p className="text-xs text-gray-600"><strong>Criterios de evaluación:</strong> {solicitudActiva.criterios}</p>
             </div>
             <div className="shrink-0 rounded-lg bg-blue-50 px-4 py-2 text-center">
-              <p className="text-2xl font-extrabold text-blue-900">3</p>
-              <p className="text-[11px] text-gray-600">Postulantes evaluados</p>
+              <p className="text-2xl font-extrabold text-blue-900">{candidatosFiltrados.length}</p>
+              <p className="text-[11px] text-gray-600">Postulantes de prueba</p>
             </div>
           </div>
 
           {/* Lista de Postulantes Anónimos */}
           <div className="space-y-4">
-            {candidatos.map((cand) => (
-              <div 
+            {candidatosFiltrados.length === 0 ? (
+              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-600">
+                No hay postulantes de prueba para esta solicitud.
+              </div>
+            ) : candidatosFiltrados.map((cand) => (
+              <div
                 key={cand.codigo}
                 className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5"
               >
@@ -147,7 +196,7 @@ export default function CandidatosCompatibles() {
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className={`h-full rounded-full ${cand.match >= 80 ? 'bg-emerald-500' : 'bg-amber-500'}`}
                       style={{ width: `${cand.match}%` }}
                     ></div>
@@ -156,13 +205,13 @@ export default function CandidatosCompatibles() {
 
                 {/* Acciones */}
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  <button 
+                  <button
                     onClick={() => setCandidatoSeleccionado(cand)}
                     className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors"
                   >
                     Ver Criterios
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/validacion-ocr')}
                     className="bg-blue-950 hover:bg-blue-900 text-white text-xs px-3 py-2 rounded-lg font-semibold transition-colors"
                   >
@@ -184,7 +233,7 @@ export default function CandidatosCompatibles() {
                 <h3 className="font-bold text-lg text-gray-900 font-mono">{candidatoSeleccionado.codigo}</h3>
                 <p className="text-xs text-emerald-700 font-medium">Evaluación objetiva por competencias</p>
               </div>
-              <button 
+              <button
                 onClick={() => setCandidatoSeleccionado(null)}
                 className="text-gray-400 hover:text-gray-600 text-lg font-bold"
               >
@@ -215,7 +264,7 @@ export default function CandidatosCompatibles() {
             </div>
 
             <div className="pt-3 border-t">
-              <button 
+              <button
                 onClick={() => {
                   setCandidatoSeleccionado(null);
                   navigate('/validacion-ocr');

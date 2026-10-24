@@ -48,7 +48,24 @@ async function extractFromPdf(filePath) {
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
-    return result?.text ?? '';
+    const extractedText = result?.text?.trim() ?? '';
+    if (extractedText) return extractedText;
+
+    const renderedPages = await parser.getScreenshot({
+      first: 20,
+      scale: 1.5,
+      imageDataUrl: false,
+    });
+    const worker = await getWorker();
+    const pageTexts = [];
+    for (const [index, page] of renderedPages.pages.entries()) {
+      const recognized = await worker.recognize(page.data);
+      pageTexts.push(`--- Página ${index + 1} ---\n${recognized?.data?.text ?? ''}`);
+    }
+    if (renderedPages.pages.length === 20) {
+      pageTexts.push('Nota: el OCR procesa como máximo las primeras 20 páginas de un PDF escaneado.');
+    }
+    return pageTexts.join('\n\n');
   } finally {
     await parser.destroy();
   }

@@ -1,130 +1,96 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
-
-const preguntas = [
-  {
-    texto: 'Al recibir una solicitud de cobertura de personal, ¿qué corresponde verificar primero?',
-    opciones: [
-      'Que el requerimiento tenga justificación y autorización del área solicitante',
-      'Que el candidato recomendado conozca al jefe del área',
-      'Que la solicitud se publique sin revisar sus requisitos',
-      'Que se seleccione al candidato con mayor antigüedad, sin evaluar el perfil',
-    ],
-    respuesta: 0,
-  },
-  {
-    texto: '¿Qué criterio favorece una evaluación imparcial de postulantes?',
-    opciones: [
-      'Priorizar recomendaciones personales',
-      'Aplicar los mismos requisitos y criterios a todas las personas postulantes',
-      'Considerar datos personales no relacionados con el puesto',
-      'Cambiar los criterios durante la evaluación',
-    ],
-    respuesta: 1,
-  },
-  {
-    texto: '¿Cuál es una práctica adecuada al revisar un documento sustentatorio?',
-    opciones: [
-      'Dar por válida cualquier copia sin revisarla',
-      'Compartir el documento en canales públicos para pedir opiniones',
-      'Verificar que sea legible y corresponda al requisito solicitado',
-      'Reemplazar los datos del documento por información estimada',
-    ],
-    respuesta: 2,
-  },
-  {
-    texto: '¿Qué información debe registrarse para mantener trazabilidad?',
-    opciones: [
-      'Solo el nombre de quien realizó la evaluación',
-      'La acción realizada, su fecha y el usuario responsable',
-      'Únicamente el resultado final',
-      'Ninguna, si el proceso ya terminó',
-    ],
-    respuesta: 1,
-  },
-  {
-    texto: 'Si una persona candidata no cumple un requisito mínimo del perfil, ¿qué se debe hacer?',
-    opciones: [
-      'Ignorar el requisito para acelerar la selección',
-      'Modificar su puntaje sin dejar registro',
-      'Aplicar el criterio establecido y registrar la observación correspondiente',
-      'Revelar su identidad al resto de postulantes',
-    ],
-    respuesta: 2,
-  },
-];
-
-const evaluacionesIniciales = [
-  { id: 'EV-001', candidato: 'Postulante #001', puesto: 'Técnico de Fiscalización', fecha: '10/10/2026', puntaje: 89, estado: 'Aprobado' },
-  { id: 'EV-002', candidato: 'Postulante #002', puesto: 'Inspector de Transporte', fecha: '09/10/2026', puntaje: 77.5, estado: 'En revisión' },
-  { id: 'EV-003', candidato: 'Postulante #003', puesto: 'Sereno Operativo', fecha: '08/10/2026', puntaje: 62.5, estado: 'Desaprobado' },
-];
-
-const fechaLocal = () => {
-  const fecha = new Date();
-  fecha.setMinutes(fecha.getMinutes() - fecha.getTimezoneOffset());
-  return fecha.toISOString().slice(0, 10);
-};
+import { apiRequest } from '../services/api';
 
 export default function Evaluaciones() {
   const [modo, setModo] = useState('historial');
-  const [evaluaciones, setEvaluaciones] = useState(evaluacionesIniciales);
+  const [candidatos, setCandidatos] = useState([]);
+  const [bancos, setBancos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState('');
   const [candidato, setCandidato] = useState('');
-  const [puesto, setPuesto] = useState('');
   const [indicePregunta, setIndicePregunta] = useState(0);
   const [respuestas, setRespuestas] = useState({});
   const [marcadas, setMarcadas] = useState([]);
   const [resultado, setResultado] = useState(null);
+  const candidatoSeleccionado = candidatos.find((item) => item.id === candidato);
+  const puesto = candidatoSeleccionado?.position_title ?? '';
+  const bancoSeleccionado = bancos.find((banco) => banco.puesto === puesto);
+  const preguntas = bancoSeleccionado?.preguntas ?? [];
+  const cantidadObjetivas = preguntas.filter((pregunta) => pregunta.tipo === 'opcion').length;
+  const cantidadEscritas = preguntas.filter((pregunta) => pregunta.tipo === 'escrita').length;
+
+  const cargarDatos = async () => {
+    const [candidateResult, bankResult] = await Promise.all([
+      apiRequest('/blind-selection/candidates'),
+      apiRequest('/blind-selection/banks'),
+    ]);
+    setCandidatos(candidateResult.candidates);
+    setBancos(bankResult.banks);
+  };
+
+  useEffect(() => {
+    cargarDatos()
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setCargando(false));
+  }, []);
 
   const iniciarEvaluacion = (event) => {
     event.preventDefault();
+    if (!candidatoSeleccionado || !bancoSeleccionado) return;
     setIndicePregunta(0);
     setRespuestas({});
     setMarcadas([]);
+    setError('');
     setModo('prueba');
   };
 
-  const finalizarEvaluacion = () => {
-    const correctas = preguntas.reduce(
-      (total, pregunta, indice) => total + (respuestas[indice] === pregunta.respuesta ? 1 : 0),
-      0
-    );
-    const puntaje = Math.round((correctas / preguntas.length) * 100);
-    const estado = puntaje >= 70 ? 'Aprobado' : 'Desaprobado';
-    const siguienteId = Math.max(
-      0,
-      ...evaluaciones.map((evaluacion) => Number(evaluacion.id.replace('EV-', '')) || 0)
-    ) + 1;
-    const [year, month, day] = fechaLocal().split('-');
-
-    const nuevaEvaluacion = {
-      id: `EV-${String(siguienteId).padStart(3, '0')}`,
-      candidato: candidato.trim(),
-      puesto: puesto.trim(),
-      fecha: `${day}/${month}/${year}`,
-      puntaje,
-      estado,
-    };
-
-    setEvaluaciones((actuales) => [nuevaEvaluacion, ...actuales]);
-    setResultado({ correctas, puntaje, estado });
-    setModo('resultado');
+  const finalizarEvaluacion = async () => {
+    setEnviando(true);
+    setError('');
+    try {
+      const { exam } = await apiRequest(`/blind-selection/candidates/${candidato}/exam`, {
+        method: 'POST',
+        body: JSON.stringify({ answers: preguntas.map((_, index) => respuestas[index]) }),
+      });
+      const puntaje = Number(exam.objective_score);
+      const correctas = Math.round((puntaje / 100) * cantidadObjetivas);
+      const estado = puntaje === 100 ? 'Pendiente de revisión' : 'Desaprobado';
+      setResultado({ correctas, puntaje, estado });
+      setModo('resultado');
+      await cargarDatos();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setEnviando(false);
+    }
   };
 
   const volverAlHistorial = () => {
     setModo('historial');
     setCandidato('');
-    setPuesto('');
     setResultado(null);
   };
 
   const preguntaActual = preguntas[indicePregunta];
-  const contestadas = Object.keys(respuestas).length;
-  const primeraSinResponder = preguntas.findIndex((_, indice) => respuestas[indice] === undefined);
+  const preguntaRespondida = (indice) => preguntas[indice].tipo === 'opcion'
+    ? typeof respuestas[indice] === 'number'
+    : typeof respuestas[indice] === 'string' && respuestas[indice].trim().length > 0;
+  const contestadas = preguntas.filter((_, indice) => preguntaRespondida(indice)).length;
+  const primeraSinResponder = preguntas.findIndex((_, indice) => !preguntaRespondida(indice));
   const ultimaPreguntaAccesible = primeraSinResponder === -1
     ? preguntas.length - 1
     : primeraSinResponder;
+  const bloquearClipboard = (event) => event.preventDefault();
+  const bloquearAtajosClipboard = (event) => {
+    const tecla = event.key.toLowerCase();
+    const modificador = event.ctrlKey || event.metaKey;
+    const atajo = (modificador && ['c', 'v', 'x', 'insert'].includes(tecla))
+      || (event.shiftKey && tecla === 'insert');
+    if (atajo) event.preventDefault();
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
@@ -142,6 +108,12 @@ export default function Evaluaciones() {
         </header>
 
         <main className="p-4 sm:p-8 space-y-6">
+          {error && (
+            <div role="alert" className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           {modo === 'historial' && (
             <>
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 border-b pb-4">
@@ -158,7 +130,7 @@ export default function Evaluaciones() {
               </div>
 
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs leading-relaxed text-blue-950">
-                Esta pantalla contiene una evaluación demostrativa de opción múltiple. Los resultados se conservan solo mientras esta página permanezca abierta.
+                Las preguntas y sus claves deben verificarse con fuentes oficiales antes de usarse en evaluaciones reales.
               </div>
 
               <section className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -168,7 +140,7 @@ export default function Evaluaciones() {
                     <thead>
                       <tr className="text-gray-400 border-b">
                         <th className="pb-3 font-medium">Cód. Eval</th>
-                        <th className="pb-3 font-medium">Candidato (ciego)</th>
+                        <th className="pb-3 font-medium">Postulante</th>
                         <th className="pb-3 font-medium">Puesto</th>
                         <th className="pb-3 font-medium">Fecha</th>
                         <th className="pb-3 font-medium">Puntaje</th>
@@ -176,23 +148,62 @@ export default function Evaluaciones() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {evaluaciones.map((evaluacion) => (
-                        <tr key={evaluacion.id} className="hover:bg-gray-50">
-                          <td className="py-3 font-bold text-blue-950">{evaluacion.id}</td>
-                          <td className="py-3 font-mono font-bold text-gray-800">{evaluacion.candidato}</td>
-                          <td className="py-3 text-gray-700">{evaluacion.puesto}</td>
-                          <td className="py-3 text-gray-500">{evaluacion.fecha}</td>
-                          <td className="py-3 font-bold text-blue-900">{evaluacion.puntaje} / 100</td>
+                      {candidatos.filter((item) => item.exam_id).map((evaluacion) => {
+                        const estado = Number(evaluacion.objective_score) < 100
+                          ? 'No superó la valla'
+                          : evaluacion.written_review_status === 'rejected'
+                            ? 'Desarrollo no aprobado'
+                            : evaluacion.identity_revealed
+                              ? 'Valla superada'
+                              : 'Pendiente de revisión';
+                        return (
+                        <tr key={evaluacion.exam_id} className="hover:bg-gray-50">
+                          <td className="py-3 font-bold text-blue-950">
+                            {evaluacion.application_code}
+                            {evaluacion.is_demo && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">PRUEBA</span>}
+                          </td>
+                          <td className="py-3 font-mono font-bold text-gray-800">
+                            {evaluacion.identity_revealed ? (
+                              <>
+                                {evaluacion.full_name}
+                                {evaluacion.has_resume && (
+                                  <a
+                                    href={`/api/blind-selection/candidates/${evaluacion.id}/resume`}
+                                    className="mt-1 block font-sans text-[10px] font-semibold text-blue-800 hover:underline"
+                                  >
+                                    Descargar CV
+                                  </a>
+                                )}
+                              </>
+                            ) : 'Identidad protegida'}
+                          </td>
+                          <td className="py-3 text-gray-700">{evaluacion.position_title}</td>
+                          <td className="py-3 text-gray-500">
+                            {evaluacion.submitted_at ? new Date(evaluacion.submitted_at).toLocaleDateString('es-PE') : '—'}
+                          </td>
+                          <td className="py-3 font-bold text-blue-900">{evaluacion.objective_score} / 100</td>
                           <td className="py-3">
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              evaluacion.estado === 'Aprobado' ? 'bg-emerald-100 text-emerald-800' :
-                              evaluacion.estado === 'En revisión' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                              estado === 'Valla superada' ? 'bg-emerald-100 text-emerald-800' :
+                              estado === 'No superó la valla' || estado === 'Desarrollo no aprobado'
+                                ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                             }`}>
-                              {evaluacion.estado}
+                              {estado}
                             </span>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
+                      {!cargando && candidatos.every((item) => !item.exam_id) && (
+                        <tr>
+                          <td colSpan="6" className="py-6 text-center text-gray-500">
+                            Aún no hay evaluaciones registradas.
+                          </td>
+                        </tr>
+                      )}
+                      {cargando && (
+                        <tr><td colSpan="6" className="py-6 text-center text-gray-500">Cargando evaluaciones…</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -215,38 +226,41 @@ export default function Evaluaciones() {
               <form onSubmit={iniciarEvaluacion} className="mt-5 space-y-4 text-xs">
                 <div>
                   <label htmlFor="codigo-candidato" className="mb-1 block font-semibold text-gray-700">
-                    Código del postulante
+                    Postulante (código ciego)
                   </label>
-                  <input
+                  <select
                     id="codigo-candidato"
-                    type="text"
                     required
                     value={candidato}
+                    className="w-full rounded-lg border border-gray-300 bg-white p-2.5"
+                    disabled={cargando}
                     onChange={(event) => setCandidato(event.target.value)}
-                    placeholder="Ej. Postulante #004"
-                    className="w-full rounded-lg border border-gray-300 p-2.5"
-                  />
+                  >
+                    <option value="">Selecciona un postulante</option>
+                    {candidatos.filter((item) => !item.exam_id).map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.application_code} · {item.position_title}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div>
-                  <label htmlFor="puesto-evaluar" className="mb-1 block font-semibold text-gray-700">
-                    Puesto a evaluar
-                  </label>
-                  <input
-                    id="puesto-evaluar"
-                    type="text"
-                    required
-                    value={puesto}
-                    onChange={(event) => setPuesto(event.target.value)}
-                    placeholder="Ej. Técnico de Fiscalización"
-                    className="w-full rounded-lg border border-gray-300 p-2.5"
-                  />
-                </div>
+                {bancoSeleccionado && (
+                  <p className="rounded-lg bg-blue-50 p-3 text-blue-950">
+                    Puesto: {puesto} · Unidad orgánica: {bancoSeleccionado.gerencia}
+                  </p>
+                )}
+                {candidatoSeleccionado && !bancoSeleccionado && (
+                  <p role="alert" className="rounded-lg bg-amber-50 p-3 text-amber-900">
+                    No hay un banco de evaluación configurado para el puesto de esta solicitud.
+                  </p>
+                )}
                 <div className="rounded-lg bg-gray-50 p-3 leading-relaxed text-gray-600">
-                  La prueba demostrativa contiene {preguntas.length} preguntas de opción múltiple. Se aprueba con 70 puntos o más. El resultado es local y no se guarda en una base de datos.
+                  La identidad permanece protegida. Para superar la valla se requiere 100% en opción múltiple y aprobación de todas las respuestas de desarrollo.
                 </div>
                 <button
                   type="submit"
-                  className="w-full rounded-lg bg-blue-950 px-4 py-2.5 font-bold text-white hover:bg-blue-900"
+                  disabled={!candidatoSeleccionado || !bancoSeleccionado || enviando}
+                  className="w-full rounded-lg bg-blue-950 px-4 py-2.5 font-bold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:bg-gray-400"
                 >
                   Comenzar evaluación
                 </button>
@@ -277,14 +291,14 @@ export default function Evaluaciones() {
                     <p className="mt-1 text-xs text-gray-500">Competencia: Normativa y procedimientos</p>
                   </div>
                   <span className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-mono text-gray-700">
-                    {candidato}
+                    {candidatoSeleccionado?.application_code}
                   </span>
                 </div>
 
                 <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-blue-950">
                   <p className="font-bold">Instrucciones de la evaluación</p>
                   <p className="mt-1">
-                    Selecciona una respuesta para habilitar el avance. Puedes volver a preguntas respondidas y cambiar tu respuesta. Para finalizar, debes contestarlas todas.
+                    Responde cada pregunta para avanzar. No escribas tu nombre ni otros datos personales en las respuestas abiertas. Copiar o cortar el contenido de las preguntas y pegar texto en las respuestas está deshabilitado durante la prueba. Puedes volver a revisar tus respuestas; las preguntas escritas se calificarán manualmente al finalizar.
                   </p>
                 </div>
 
@@ -308,32 +322,61 @@ export default function Evaluaciones() {
                   </div>
                 </div>
 
-                <fieldset className="mt-7">
-                  <legend className="text-base font-semibold leading-relaxed text-gray-900">
+                <fieldset
+                  className="mt-7 select-none"
+                  onCopy={bloquearClipboard}
+                  onCut={bloquearClipboard}
+                  onContextMenu={bloquearClipboard}
+                  onDragStart={bloquearClipboard}
+                  onKeyDown={bloquearAtajosClipboard}
+                >
+                  <legend className="select-none text-base font-semibold leading-relaxed text-gray-900">
                     {preguntaActual.texto}
                   </legend>
-                  <div className="mt-5 space-y-3">
-                    {preguntaActual.opciones.map((opcion, indiceOpcion) => (
-                      <label
-                        key={opcion}
-                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors ${
-                          respuestas[indicePregunta] === indiceOpcion
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`pregunta-${indicePregunta}`}
-                          value={indiceOpcion}
-                          checked={respuestas[indicePregunta] === indiceOpcion}
-                          onChange={() => setRespuestas({ ...respuestas, [indicePregunta]: indiceOpcion })}
-                          className="mt-0.5 accent-blue-900"
-                        />
-                        <span>{opcion}</span>
+                  {preguntaActual.tipo === 'opcion' ? (
+                    <div className="mt-5 space-y-3">
+                      {preguntaActual.opciones.map((opcion, indiceOpcion) => (
+                        <label
+                          key={opcion}
+                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors ${
+                            respuestas[indicePregunta] === indiceOpcion
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`pregunta-${indicePregunta}`}
+                            value={indiceOpcion}
+                            checked={respuestas[indicePregunta] === indiceOpcion}
+                            onChange={() => setRespuestas({ ...respuestas, [indicePregunta]: indiceOpcion })}
+                            className="mt-0.5 accent-blue-900"
+                          />
+                          <span>{opcion}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-5">
+                      <label htmlFor={`respuesta-escrita-${indicePregunta}`} className="mb-2 block text-xs font-semibold text-gray-700">
+                        Escribe tu respuesta
                       </label>
-                    ))}
-                  </div>
+                      <textarea
+                        id={`respuesta-escrita-${indicePregunta}`}
+                        rows={5}
+                        maxLength={2000}
+                        required
+                        value={respuestas[indicePregunta] ?? ''}
+                        onChange={(event) => setRespuestas({ ...respuestas, [indicePregunta]: event.target.value })}
+                        onPaste={bloquearClipboard}
+                        placeholder="Desarrolla tu respuesta..."
+                        className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
+                      />
+                      <p className="mt-1 text-right text-[10px] text-gray-500">
+                        {(respuestas[indicePregunta] ?? '').length} / 2000 caracteres
+                      </p>
+                    </div>
+                  )}
                 </fieldset>
 
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
@@ -365,7 +408,7 @@ export default function Evaluaciones() {
                       <button
                         type="button"
                         onClick={() => setIndicePregunta((actual) => Math.min(preguntas.length - 1, actual + 1))}
-                        disabled={respuestas[indicePregunta] === undefined}
+                        disabled={!preguntaRespondida(indicePregunta)}
                         className="rounded-lg bg-blue-950 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:bg-gray-400"
                       >
                         Siguiente →
@@ -374,10 +417,14 @@ export default function Evaluaciones() {
                       <button
                         type="button"
                         onClick={finalizarEvaluacion}
-                        disabled={contestadas < preguntas.length}
+                        disabled={contestadas < preguntas.length || enviando}
                         className="rounded-lg bg-blue-950 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:bg-gray-400"
                       >
-                        {contestadas < preguntas.length ? 'Completa todas las preguntas' : 'Finalizar evaluación'}
+                        {enviando
+                          ? 'Guardando resultado…'
+                          : contestadas < preguntas.length
+                            ? 'Completa todas las preguntas'
+                            : 'Finalizar evaluación'}
                       </button>
                     )}
                   </div>
@@ -413,35 +460,40 @@ export default function Evaluaciones() {
           {modo === 'resultado' && resultado && (
             <section className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm sm:p-10">
               <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full text-2xl font-extrabold ${
-                resultado.estado === 'Aprobado' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                resultado.estado === 'Valla superada' ? 'bg-emerald-100 text-emerald-700' :
+                  resultado.estado === 'Desaprobado' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
               }`}>
-                {resultado.estado === 'Aprobado' ? '✓' : '!'}
+                {resultado.estado === 'Valla superada' ? '✓' : resultado.estado === 'Desaprobado' ? '×' : '…'}
               </div>
               <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Resultado de evaluación</p>
               <h2 className={`mt-1 text-3xl font-extrabold ${
-                resultado.estado === 'Aprobado' ? 'text-emerald-700' : 'text-amber-700'
+                resultado.estado === 'Valla superada' ? 'text-emerald-700' :
+                  resultado.estado === 'Desaprobado' ? 'text-red-700' : 'text-amber-700'
               }`}>
-                {resultado.estado === 'Aprobado' ? 'APTO' : 'NO APTO'}
+                {resultado.estado === 'Pendiente de revisión' ? 'PENDIENTE DE REVISIÓN' :
+                  resultado.estado === 'Valla superada' ? 'VALLA SUPERADA' : 'NO APTO'}
               </h2>
-              <p className="mt-2 text-sm text-gray-700">{candidato} · {puesto}</p>
+              <p className="mt-2 text-sm text-gray-700">{candidatoSeleccionado?.application_code} · {puesto}</p>
 
               <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">Puntaje obtenido</p>
+                  <p className="text-xs text-gray-500">Puntaje objetivo (opción múltiple)</p>
                   <p className="mt-1 text-2xl font-bold text-blue-950">{resultado.puntaje} / 100</p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">Respuestas correctas</p>
-                  <p className="mt-1 text-2xl font-bold text-blue-950">{resultado.correctas} / {preguntas.length}</p>
+                  <p className="text-xs text-gray-500">Respuestas objetivas correctas</p>
+                  <p className="mt-1 text-2xl font-bold text-blue-950">{resultado.correctas} / {cantidadObjetivas}</p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">Umbral aprobatorio</p>
-                  <p className="mt-1 text-2xl font-bold text-blue-950">70%</p>
+                  <p className="text-xs text-gray-500">Respuestas abiertas</p>
+                  <p className="mt-1 text-2xl font-bold text-blue-950">{cantidadEscritas} pendientes de revisión</p>
                 </div>
               </div>
 
               <p className="mt-5 text-xs leading-relaxed text-gray-500">
-                Este resultado pertenece a una demostración y solo permanece en memoria mientras la página está abierta.
+                {resultado.estado === 'Pendiente de revisión'
+                  ? 'El puntaje perfecto objetivo queda registrado. La identidad seguirá protegida hasta que una persona evaluadora apruebe todas las respuestas de desarrollo.'
+                  : 'El resultado se guardó. El postulante no alcanzó el puntaje máximo exigido y su identidad permanece protegida.'}
               </p>
               <button
                 type="button"

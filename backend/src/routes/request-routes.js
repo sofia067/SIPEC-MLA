@@ -7,6 +7,7 @@ const requestSchema = z.object({
   department: z.string().trim().min(2).max(160),
   positionTitle: z.string().trim().min(2).max(160),
   reason: z.string().trim().min(10).max(4000),
+  priority: z.enum(['Alta', 'Media', 'Baja']).default('Media'),
   requiredBy: z.union([z.literal(''), z.iso.date()]).optional().transform((value) => value || null),
 });
 

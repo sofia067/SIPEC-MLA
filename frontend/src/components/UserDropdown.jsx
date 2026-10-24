@@ -1,8 +1,31 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom'; // Asegúrate de tener instalado react-router-dom
+import { useAuth } from '../auth/AuthContext';
 
 export default function UserDropdown() {
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [error, setError] = useState('');
+  const { user, logout } = useAuth();
+  const roleNames = {
+    admin: 'Administrador',
+    hr_specialist: 'Especialista RR.HH.',
+    area_manager: 'Jefe de Área',
+  };
+  const initials = (user?.displayName || user?.username || '?')
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  const cerrarSesion = async () => {
+    setError('');
+    try {
+      await logout();
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
 
   return (
     <div className="relative">
@@ -12,11 +35,11 @@ export default function UserDropdown() {
         className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none"
       >
         <div className="w-9 h-9 rounded-full bg-blue-900 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-          CR
+          {initials}
         </div>
         <div className="text-left hidden sm:block">
-          <p className="text-sm font-semibold text-gray-800 leading-tight">Carlos Ramírez</p>
-          <p className="text-xs text-gray-500">Jefe de Área</p>
+          <p className="text-sm font-semibold text-gray-800 leading-tight">{user?.displayName || user?.username}</p>
+          <p className="text-xs text-gray-500">{roleNames[user?.role] || user?.role}</p>
         </div>
         {/* Icono Flecha Dropdown */}
         <svg 
@@ -36,7 +59,7 @@ export default function UserDropdown() {
           {/* Encabezado del Menú */}
           <div className="px-4 py-2 border-b border-gray-100">
             <p className="text-xs text-gray-400 font-medium">Sesión iniciada como</p>
-            <p className="text-sm font-bold text-gray-700 truncate">carlos.ramirez@losaquijes.gob.pe</p>
+            <p className="text-sm font-bold text-gray-700 truncate">{user?.username}</p>
           </div>
 
           {/* Opciones del Menú */}
@@ -76,16 +99,17 @@ export default function UserDropdown() {
 
           {/* Separador y Opción Salir */}
           <div className="border-t border-gray-100 pt-1 mt-1">
-            <Link 
-              to="/" 
-              onClick={() => setMenuAbierto(false)}
-              className="flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors"
+            <button
+              type="button"
+              onClick={cerrarSesion}
+              className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors"
             >
               <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span>Cerrar Sesión</span>
-            </Link>
+            </button>
+            {error && <p role="alert" className="px-4 py-2 text-xs text-red-600">{error}</p>}
           </div>
 
         </div>

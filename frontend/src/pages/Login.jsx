@@ -1,51 +1,42 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 
 function Login() {
   const [credenciales, setCredenciales] = useState({ usuario: '', password: '', rol: '' });
-  const [intentos, setIntentos] = useState(0);
-  const [bloqueado, setBloqueado] = useState(false);
   const [mensajeError, setMensajeError] = useState('');
+  const [enviando, setEnviando] = useState(false);
   const navigate = useNavigate();
+  const { user, login, connectionError } = useAuth();
 
-  const MAX_INTENTOS = 3;
+  useEffect(() => {
+    if (user) navigate('/dashboard', { replace: true });
+  }, [user, navigate]);
 
   const manejarCambio = (e) => {
     setCredenciales({ ...credenciales, [e.target.name]: e.target.value });
   };
 
-  const manejarIngreso = (e) => {
+  const manejarIngreso = async (e) => {
     e.preventDefault();
-
-    // 1. Validar estrictamente que ningún campo esté vacío
     if (!credenciales.usuario.trim() || !credenciales.password.trim() || !credenciales.rol) {
       setMensajeError('Por favor, complete su usuario, contraseña y seleccione su rol.');
       return;
     }
 
-    // 2. Simulación de validación (aquí iría la consulta a tu API/Backend)
-    const esValido = credenciales.usuario === 'admin' && credenciales.password === '123456';
-
-    if (esValido) {
-      setMensajeError('');
+    setEnviando(true);
+    setMensajeError('');
+    try {
+      await login({
+        username: credenciales.usuario.trim(),
+        password: credenciales.password,
+        role: credenciales.rol,
+      });
       navigate('/dashboard');
-    } else {
-      const nuevosIntentos = intentos + 1;
-      setIntentos(nuevosIntentos);
-
-      if (nuevosIntentos >= MAX_INTENTOS) {
-        setBloqueado(true);
-        setMensajeError(`Ha superado el límite de ${MAX_INTENTOS} intentos. Intente nuevamente en 30 segundos.`);
-        
-        // Desbloquear después de 30 segundos
-        setTimeout(() => {
-          setBloqueado(false);
-          setIntentos(0);
-          setMensajeError('');
-        }, 30000);
-      } else {
-        setMensajeError(`Credenciales o rol incorrectos. Intentos restantes: ${MAX_INTENTOS - nuevosIntentos}`);
-      }
+    } catch (error) {
+      setMensajeError(error.message);
+    } finally {
+      setEnviando(false);
     }
   };
 
@@ -72,9 +63,9 @@ function Login() {
           <h2 className="text-xl font-bold text-gray-800">Bienvenido a SIPEC-MLA</h2>
           <p className="text-xs text-gray-500 mb-4">Inicia sesión para continuar</p>
 
-          {mensajeError && (
+          {(mensajeError || connectionError) && (
             <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 text-red-700 text-xs rounded">
-              {mensajeError}
+              {mensajeError || connectionError}
             </div>
           )}
 
@@ -87,7 +78,7 @@ function Login() {
                 placeholder="Ingrese su usuario"
                 value={credenciales.usuario}
                 onChange={manejarCambio}
-                disabled={bloqueado}
+                disabled={enviando}
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-800 border-gray-300 disabled:bg-gray-100"
                 required
               />
@@ -101,7 +92,7 @@ function Login() {
                 placeholder="Ingrese su contraseña"
                 value={credenciales.password}
                 onChange={manejarCambio}
-                disabled={bloqueado}
+                disabled={enviando}
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-800 border-gray-300 disabled:bg-gray-100"
                 required
               />
@@ -113,7 +104,7 @@ function Login() {
                 name="rol"
                 value={credenciales.rol}
                 onChange={manejarCambio}
-                disabled={bloqueado}
+                disabled={enviando}
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-800 border-gray-300 bg-white text-gray-700 disabled:bg-gray-100"
                 required
               >
@@ -134,13 +125,19 @@ function Login() {
 
             <button 
               type="submit" 
-              disabled={bloqueado}
+              disabled={enviando}
               className={`w-full font-bold py-2.5 rounded-md transition duration-200 mt-2 shadow text-white ${
-                bloqueado ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'
+                enviando ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'
               }`}>
-              {bloqueado ? 'Acceso temporalmente bloqueado' : 'Iniciar sesión'}
+              {enviando ? 'Conectando...' : 'Iniciar sesión'}
             </button>
           </form>
+          <p className="mt-5 text-center text-xs text-gray-500">
+            ¿Vas a realizar una demostración?{' '}
+            <Link to="/postular" className="font-semibold text-blue-800 hover:underline">
+              Ir al portal de postulaciones de prueba
+            </Link>
+          </p>
         </div>
 
       </div>

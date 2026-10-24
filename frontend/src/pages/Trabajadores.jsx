@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
+import { apiRequest } from '../services/api';
 
 export default function Trabajadores() {
   const navigate = useNavigate();
   const [busqueda, setBusqueda] = useState('');
+  const [trabajadores, setTrabajadores] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
 
-  const [trabajadores] = useState([
-    { id: 'TR-402', dni: '45892103', nombre: 'Juan Carlos Mendoza', gerencia: 'Gerencia de Administración Tributaria', puesto: 'Auxiliar de Fiscalización', condicion: 'CAS', estado: 'Activo' },
-    { id: 'TR-108', dni: '70123984', nombre: 'Ana María Torres', gerencia: 'Gerencia de Desarrollo Territorial e Infraestructura', puesto: 'Inspector de Transporte', condicion: 'Nombrado', estado: 'Activo' },
-    { id: 'TR-215', dni: '41982301', nombre: 'Roberto Gómez Silva', gerencia: 'Gerencia de Servicios Municipales y Gestión Ambiental', puesto: 'Sereno Operativo', condicion: 'CAS', estado: 'Activo' },
-    { id: 'TR-301', dni: '10928374', nombre: 'Lucía Fernández Quispe', gerencia: 'Oficina de Administración y Finanzas', puesto: 'Especialista en RRHH', condicion: '728', estado: 'Licencia' },
-  ]);
+  useEffect(() => {
+    apiRequest('/workers')
+      .then(({ workers }) => setTrabajadores(workers.map((worker) => ({
+        id: worker.employee_number,
+        dni: worker.document_number,
+        nombre: worker.full_name,
+        gerencia: worker.department,
+        puesto: worker.position || 'Sin puesto asignado',
+        condicion: 'No especificada',
+        estado: worker.status === 'active' ? 'Activo' : 'Inactivo',
+      }))))
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setCargando(false));
+  }, []);
 
   const filtrados = trabajadores.filter(t => 
     t.nombre.toLowerCase().includes(busqueda.toLowerCase()) || 
@@ -36,6 +48,9 @@ export default function Trabajadores() {
         </header>
 
         <main className="p-8 space-y-6">
+          {error && (
+            <div role="alert" className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          )}
           <div className="flex justify-between items-center border-b pb-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Directorio de Trabajadores</h2>
@@ -97,6 +112,12 @@ export default function Trabajadores() {
                     </td>
                   </tr>
                 ))}
+                {!cargando && filtrados.length === 0 && (
+                  <tr><td colSpan="8" className="py-6 text-center text-gray-500">
+                    {error ? 'No se pudieron cargar los trabajadores.' : 'No hay trabajadores registrados.'}
+                  </td></tr>
+                )}
+                {cargando && <tr><td colSpan="8" className="py-6 text-center text-gray-500">Cargando trabajadores...</td></tr>}
               </tbody>
             </table>
           </div>

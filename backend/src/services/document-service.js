@@ -1,4 +1,5 @@
-import { unlink } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile, unlink } from 'node:fs/promises';
 import { AppError } from '../errors/app-error.js';
 import { modulesRepository } from '../repositories/modules-repository.js';
 import { extractText, isSupportedMime } from './ocr-service.js';
@@ -41,12 +42,20 @@ export const documentService = {
       throw new AppError(404, 'NOT_FOUND', 'No se encontró el documento a validar.');
     }
 
-    const document = await modulesRepository.setDocumentFile(id, {
-      fileName: file.originalname,
-      filePath: file.path,
-      fileMime: file.mimetype,
-      fileSize: file.size,
-    }, actorId);
+    let document;
+    try {
+      const fileSha256 = createHash('sha256').update(await readFile(file.path)).digest('hex');
+      document = await modulesRepository.setDocumentFile(id, {
+        fileName: file.originalname,
+        filePath: file.path,
+        fileMime: file.mimetype,
+        fileSize: file.size,
+        fileSha256,
+      }, actorId);
+    } catch (error) {
+      await unlink(file.path).catch(() => {});
+      throw error;
+    }
 
     if (previous.file_path && previous.file_path !== file.path) {
       await unlink(previous.file_path).catch(() => {});

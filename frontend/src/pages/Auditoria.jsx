@@ -1,25 +1,79 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
+import { apiRequest } from '../services/api';
+
+const etiquetasEvento = {
+  'coverage_request.created': 'Creación de solicitud de cobertura',
+  'coverage_request.updated': 'Edición de solicitud de cobertura',
+  'coverage_request.status_changed': 'Cambio de estado de solicitud',
+  'coverage_request.deleted': 'Eliminación de solicitud de cobertura',
+  'worker.created': 'Registro de trabajador',
+  'worker.updated': 'Actualización de trabajador',
+  'worker.deactivated': 'Desactivación de trabajador',
+  'position_profile.created': 'Creación de perfil de puesto',
+  'position_profile.updated': 'Actualización de perfil de puesto',
+  'position_profile.deleted': 'Desactivación de perfil de puesto',
+  'documents.created': 'Registro de documento',
+  'documents.updated': 'Actualización de documento',
+  'documents.deleted': 'Eliminación de documento',
+  'document.file_uploaded': 'Carga de archivo para OCR',
+  'evaluations.created': 'Registro de evaluación',
+  'evaluations.updated': 'Actualización de evaluación',
+  'evaluations.deleted': 'Eliminación de evaluación',
+  'assignment.created': 'Creación de asignación',
+  'assignment.updated': 'Actualización de asignación',
+  'assignment.deleted': 'Eliminación de asignación',
+  'user.created': 'Creación de usuario',
+  'user.updated': 'Actualización de usuario',
+  'user.deactivated': 'Desactivación de usuario',
+  'blind_candidate.created': 'Registro de postulante ciego',
+  'blind_candidate.exam_submitted': 'Envío de examen de postulante',
+  'blind_candidate.exam_reviewed': 'Revisión de respuestas de desarrollo',
+  'blind_candidate.identity_revealed': 'Revelación de identidad tras superar la valla',
+};
+
+const etiquetasRecurso = {
+  coverage_request: 'Solicitudes',
+  worker: 'Trabajadores',
+  position_profile: 'Perfiles de puesto',
+  documents: 'Documentos',
+  evaluations: 'Evaluaciones',
+  assignment: 'Asignaciones',
+  user: 'Usuarios',
+  blind_candidate: 'Selección ciega',
+};
 
 export default function Auditoria() {
   const [busqueda, setBusqueda] = useState('');
-  const registros = [
-    { id: 'LOG-8902', usuario: 'admin_rrhh', accion: 'Creación de Solicitud de Cobertura', modulo: 'Solicitudes', fecha: '15/10/2026 14:22', ip: '192.168.1.45' },
-    { id: 'LOG-8901', usuario: 'jefe_fiscalizacion', accion: 'Consulta de Candidatos Compatibles (Ciego)', modulo: 'Match Engine', fecha: '15/10/2026 11:05', ip: '192.168.1.12' },
-    { id: 'LOG-8900', usuario: 'admin_rrhh', accion: 'Validación OCR de Certificado Técnico', modulo: 'OCR', fecha: '14/10/2026 16:40', ip: '192.168.1.45' },
-    { id: 'LOG-8899', usuario: 'm_valencia', accion: 'Aprobación de Asignación de Puesto', modulo: 'Evaluaciones', fecha: '14/10/2026 09:15', ip: '192.168.1.88' },
-  ];
+  const [registros, setRegistros] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    apiRequest('/audit')
+      .then(({ events }) => setRegistros(events))
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setCargando(false));
+  }, []);
+
   const registrosFiltrados = useMemo(() => {
     const termino = busqueda.trim().toLocaleLowerCase('es');
 
     if (!termino) return registros;
 
-    return registros.filter((registro) =>
-      [registro.id, registro.usuario, registro.accion, registro.modulo, registro.fecha]
-        .some((valor) => valor.toLocaleLowerCase('es').includes(termino))
-    );
-  }, [busqueda]);
+    return registros.filter((registro) => {
+      const campos = [
+        registro.id,
+        registro.username,
+        registro.display_name,
+        etiquetasEvento[registro.event_type] ?? registro.event_type,
+        etiquetasRecurso[registro.resource_type] ?? registro.resource_type,
+        JSON.stringify(registro.metadata ?? {}),
+      ];
+      return campos.some((valor) => String(valor ?? '').toLocaleLowerCase('es').includes(termino));
+    });
+  }, [busqueda, registros]);
 
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
@@ -42,9 +96,11 @@ export default function Auditoria() {
             <p className="mt-1 text-sm text-gray-600">Consulta de actividad registrada en el sistema.</p>
           </div>
 
-          <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Registros de demostración. La auditoría real debe cargarse desde el backend y protegerse según permisos.
-          </div>
+          {error && (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              No se pudieron cargar los eventos de auditoría: {error}
+            </div>
+          )}
 
           <section aria-label="Registros de auditoría" className="bg-white p-4 sm:p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -62,33 +118,48 @@ export default function Auditoria() {
             </div>
             <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm border-collapse">
-              <caption className="sr-only">Eventos de auditoría de ejemplo</caption>
+              <caption className="sr-only">Eventos de auditoría registrados en el sistema</caption>
               <thead>
                 <tr className="text-gray-400 border-b pb-2">
                   <th scope="col" className="pb-3 pr-4 font-medium">ID de evento</th>
                   <th scope="col" className="pb-3 pr-4 font-medium">Usuario</th>
                   <th scope="col" className="pb-3 pr-4 font-medium">Acción</th>
                   <th scope="col" className="pb-3 pr-4 font-medium">Módulo</th>
-                  <th scope="col" className="pb-3 pr-4 font-medium">Fecha y hora</th>
-                  <th scope="col" className="pb-3 font-medium">Dirección IP</th>
+                  <th scope="col" className="pb-3 font-medium">Fecha y hora</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {registrosFiltrados.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-3 pr-4 font-mono font-semibold text-blue-950">{r.id}</td>
-                    <td className="py-3 pr-4 font-medium text-gray-900">{r.usuario}</td>
-                    <td className="py-3 pr-4 text-gray-700">{r.accion}</td>
-                    <td className="py-3 pr-4"><span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-medium">{r.modulo}</span></td>
-                    <td className="py-3 pr-4 text-gray-600">{r.fecha}</td>
-                    <td className="py-3 font-mono text-gray-600">{r.ip}</td>
+                    <td className="py-3 pr-4 font-mono font-semibold text-blue-950">LOG-{String(r.id).padStart(5, '0')}</td>
+                    <td className="py-3 pr-4 font-medium text-gray-900">{r.display_name || r.username || 'Usuario no disponible'}</td>
+                    <td className="py-3 pr-4 text-gray-700">
+                      {etiquetasEvento[r.event_type] ?? r.event_type}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-medium">
+                        {etiquetasRecurso[r.resource_type] ?? r.resource_type}
+                      </span>
+                    </td>
+                    <td className="py-3 text-gray-600">
+                      {new Date(r.created_at).toLocaleString('es-PE')}
+                    </td>
                   </tr>
                 ))}
-                {registrosFiltrados.length === 0 && (
+                {!cargando && registrosFiltrados.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-gray-500">
-                      No se encontraron registros que coincidan con la búsqueda.
+                    <td colSpan="5" className="py-8 text-center text-gray-500">
+                      {error
+                        ? 'No se pudo obtener la actividad de auditoría.'
+                        : busqueda
+                          ? 'No se encontraron registros que coincidan con la búsqueda.'
+                          : 'Aún no hay eventos de auditoría registrados.'}
                     </td>
+                  </tr>
+                )}
+                {cargando && (
+                  <tr>
+                    <td colSpan="5" className="py-8 text-center text-gray-500">Cargando actividad…</td>
                   </tr>
                 )}
               </tbody>

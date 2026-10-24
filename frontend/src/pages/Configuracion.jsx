@@ -1,31 +1,66 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
+import { apiRequest } from '../services/api';
 
 const configuracionInicial = {
-  anonimizar: true,
-  umbralOcr: '85',
+  anonymizationEnabled: true,
+  ocrConfidenceThreshold: 85,
 };
 
 export default function Configuracion() {
   const [configuracion, setConfiguracion] = useState(configuracionInicial);
+  const [configuracionGuardada, setConfiguracionGuardada] = useState(configuracionInicial);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
-  const hayCambios = configuracion.anonimizar !== configuracionInicial.anonimizar
-    || configuracion.umbralOcr !== configuracionInicial.umbralOcr;
+  const hayCambios = configuracion.anonymizationEnabled !== configuracionGuardada.anonymizationEnabled
+    || configuracion.ocrConfidenceThreshold !== configuracionGuardada.ocrConfidenceThreshold;
+
+  useEffect(() => {
+    apiRequest('/settings')
+      .then(({ settings }) => {
+        setConfiguracion(settings);
+        setConfiguracionGuardada(settings);
+      })
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setCargando(false));
+  }, []);
 
   const actualizarConfiguracion = (campo, valor) => {
     setConfiguracion((actual) => ({ ...actual, [campo]: valor }));
     setMensaje('');
+    setError('');
   };
 
-  const guardarConfiguracion = (evento) => {
+  const guardarConfiguracion = async (evento) => {
     evento.preventDefault();
-    setMensaje('El backend aún no está conectado: los cambios no se guardaron.');
+    setGuardando(true);
+    setError('');
+    setMensaje('');
+    try {
+      const { settings } = await apiRequest('/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          anonymizationEnabled: configuracion.anonymizationEnabled,
+          ocrConfidenceThreshold: Number(configuracion.ocrConfidenceThreshold),
+        }),
+      });
+      setConfiguracion(settings);
+      setConfiguracionGuardada(settings);
+      setMensaje('Configuración actualizada correctamente.');
+    } catch (requestError) {
+      setError(`No se pudo guardar la configuración: ${requestError.message}`);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const restablecerConfiguracion = () => {
-    setConfiguracion(configuracionInicial);
-    setMensaje('Se restablecieron los valores del formulario. Aún no se guardaron.');
+    setConfiguracion(configuracionGuardada);
+    setMensaje('');
+    setError('');
   };
 
   return (
@@ -49,9 +84,11 @@ export default function Configuracion() {
             <p className="mt-1 text-sm text-gray-600">Parámetros institucionales de la Municipalidad Distrital de Los Aquijes.</p>
           </div>
 
-          <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Estos valores son una vista previa local y todavía no se persisten en el servidor.
-          </div>
+          {error && (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={guardarConfiguracion} className="bg-white p-5 sm:p-6 rounded-xl border border-gray-200 shadow-sm space-y-6 text-sm max-w-2xl">
             <section className="space-y-4 border-b border-gray-200 pb-5">
@@ -64,9 +101,10 @@ export default function Configuracion() {
                 <input
                   id="anonimizar"
                   type="checkbox"
-                  checked={configuracion.anonimizar}
-                  onChange={(evento) => actualizarConfiguracion('anonimizar', evento.target.checked)}
+                  checked={configuracion.anonymizationEnabled}
+                  onChange={(evento) => actualizarConfiguracion('anonymizationEnabled', evento.target.checked)}
                   aria-describedby="anonimizar-ayuda"
+                  disabled={cargando || guardando}
                   className="h-4 w-4 shrink-0 accent-blue-950"
                 />
               </div>
@@ -84,9 +122,10 @@ export default function Configuracion() {
                   max="100"
                   step="1"
                   required
-                  value={configuracion.umbralOcr}
-                  onChange={(evento) => actualizarConfiguracion('umbralOcr', evento.target.value)}
+                  value={configuracion.ocrConfidenceThreshold}
+                  onChange={(evento) => actualizarConfiguracion('ocrConfidenceThreshold', evento.target.value === '' ? '' : Number(evento.target.value))}
                   aria-describedby="umbral-ocr-ayuda"
+                  disabled={cargando || guardando}
                   className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-800"
                 />
               </div>
@@ -95,21 +134,22 @@ export default function Configuracion() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="submit"
-                disabled={!hayCambios}
+                disabled={cargando || guardando || !hayCambios}
                 className="rounded-lg bg-blue-950 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-950 disabled:cursor-not-allowed disabled:bg-gray-400"
               >
-                Guardar cambios
+                {guardando ? 'Guardando…' : 'Guardar cambios'}
               </button>
               <button
                 type="button"
                 onClick={restablecerConfiguracion}
-                disabled={!hayCambios}
+                disabled={cargando || guardando || !hayCambios}
                 className="rounded-lg border border-gray-300 px-4 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-950 disabled:cursor-not-allowed disabled:text-gray-400"
               >
                 Restablecer
               </button>
+              {cargando && <span role="status" className="text-sm text-gray-500">Cargando configuración…</span>}
             </div>
-            {mensaje && <p role="status" className="text-sm text-amber-800">{mensaje}</p>}
+            {mensaje && <p role="status" className="text-sm text-green-800">{mensaje}</p>}
           </form>
         </main>
       </div>
