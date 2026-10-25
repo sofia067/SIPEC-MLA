@@ -1,8 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
+import PortalPostulacion from './pages/PortalPostulacion';
 import Dashboard from './pages/Dashboard';
 import SolicitudesCobertura from './pages/SolicitudesCobertura';
+import NuevaSolicitudPOI from './pages/NuevaSolicitudPOI';
 import PerfilPuesto from './pages/PerfilPuesto';
 import PerfilPuestoDetalle from './pages/PerfilPuestoDetalle';
 import MiPerfil from './pages/MiPerfil';
@@ -20,6 +22,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/postular" element={<PortalPostulacion />} />
         <Route path="/dashboard" element={<Dashboard />} />
        <Route path="/solicitudes-cobertura" element={<SolicitudesCobertura />} />
        <Route path="/nueva-solicitud" element={<SolicitudesCobertura />} />
