@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
+import { apiRequest } from '../lib/api';
+
+const palabrasPorCandidato = {
+  'Postulante #001': ['auxiliar administrativo', 'asistente administrativo', 'logística', 'contrataciones'],
+  'Postulante #002': ['inspector', 'tributario', 'fiscalización', 'fiscalizacion'],
+  'Postulante #003': ['serenazgo', 'chofer', 'seguridad ciudadana'],
+};
 
 export default function CandidatosCompatibles() {
   const navigate = useNavigate();
 
-  // Solicitud seleccionada actualmente
-  const [solicitudFiltro, setSolicitudFiltro] = useState('SC-001');
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [solicitudFiltro, setSolicitudFiltro] = useState('');
   const [candidatoSeleccionado, setCandidatoSeleccionado] = useState(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [compatibilidadMinima, setCompatibilidadMinima] = useState('0');
+  const [estadoFiltro, setEstadoFiltro] = useState('Todos');
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
 
   // Datos ANÓNIMOS para Selección Ciega (Mock Data)
   const [candidatos] = useState([
@@ -44,6 +56,45 @@ export default function CandidatosCompatibles() {
     }
   ]);
 
+  useEffect(() => {
+    let active = true;
+    apiRequest('/requests')
+      .then(({ requests: availableRequests }) => {
+        if (!active) return;
+        const compatibles = availableRequests.filter((request) => !['rejected', 'completed'].includes(request.status));
+        setSolicitudes(compatibles);
+        setSolicitudFiltro(compatibles[0]?.id || '');
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message);
+      })
+      .finally(() => {
+        if (active) setCargando(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const solicitudSeleccionada = solicitudes.find((request) => request.id === solicitudFiltro);
+  const candidatosFiltrados = useMemo(() => {
+    const texto = busqueda.trim().toLocaleLowerCase('es');
+    const tituloPuesto = solicitudSeleccionada?.position_title?.toLocaleLowerCase('es') || '';
+    return candidatos
+      .filter((candidato) => (palabrasPorCandidato[candidato.codigo] || []).some((palabra) => tituloPuesto.includes(palabra)))
+      .filter((candidato) => candidato.match >= Number(compatibilidadMinima))
+      .filter((candidato) => estadoFiltro === 'Todos' || candidato.estado === estadoFiltro)
+      .filter((candidato) => !texto || [
+        candidato.codigo,
+        candidato.puestoActual,
+        candidato.experiencia,
+        candidato.estudios,
+        ...candidato.puntosFuertes,
+        ...candidato.observaciones,
+      ].some((value) => value.toLocaleLowerCase('es').includes(texto)))
+      .sort((first, second) => second.match - first.match);
+  }, [busqueda, candidatos, compatibilidadMinima, estadoFiltro, solicitudSeleccionada]);
+
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
       <Sidebar />
@@ -68,24 +119,30 @@ export default function CandidatosCompatibles() {
                 <h2 className="text-2xl font-bold text-gray-900">Candidatos Compatibles</h2>
               </div>
               <p className="text-xs text-gray-500">
-                Ranking de evaluación automatizada con datos anonimizados para prevenir sesgos de selección.
+                Filtros de búsqueda y compatibilidad sobre candidatos de demostración anonimizados.
               </p>
             </div>
 
             {/* Selector de Solicitud de Cobertura */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
-              <label className="font-semibold text-gray-700">Solicitud activa:</label>
+              <label htmlFor="solicitud-compatible" className="font-semibold text-gray-700">Solicitud activa:</label>
               <select 
+                id="solicitud-compatible"
                 value={solicitudFiltro}
                 onChange={(e) => setSolicitudFiltro(e.target.value)}
                 className="w-full sm:w-auto border bg-white px-3 py-1.5 rounded-lg font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
               >
-                <option value="SC-001">SC-001 | Técnico de Fiscalización (Prioridad Alta)</option>
-                <option value="SC-002">SC-002 | Subgerente de Infraestructura</option>
-                <option value="SC-003">SC-003 | Inspector de Servicios Municipales</option>
+                <option value="">{cargando ? 'Cargando solicitudes…' : 'Selecciona una solicitud'}</option>
+                {solicitudes.map((request) => (
+                  <option key={request.id} value={request.id}>
+                    {request.code} | {request.position_title} ({request.priority === 'high' ? 'Prioridad alta' : request.priority === 'low' ? 'Prioridad baja' : 'Prioridad media'})
+                  </option>
+                ))}
               </select>
             </div>
           </div>
+
+          {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
 
           {/* Banner de Garantía Anti-Favoritismo */}
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-900">
@@ -104,18 +161,63 @@ export default function CandidatosCompatibles() {
               <span className="text-[10px] bg-blue-50 text-blue-900 uppercase font-bold px-2 py-0.5 rounded">
                 Requerimiento Activo
               </span>
-              <h3 className="text-lg font-bold text-gray-900">Puesto: Técnico de Fiscalización y Coactiva</h3>
+              <h3 className="text-lg font-bold text-gray-900">
+                Puesto: {solicitudSeleccionada?.position_title || (cargando ? 'Cargando…' : 'Sin solicitud seleccionada')}
+              </h3>
+              {solicitudSeleccionada && <p className="text-xs text-gray-600">{solicitudSeleccionada.code} · {solicitudSeleccionada.department}</p>}
               <p className="text-xs text-gray-600">Criterios de evaluación: Competencias técnicas, años de experiencia y grado académico acreditado.</p>
             </div>
             <div className="shrink-0 rounded-lg bg-blue-50 px-4 py-2 text-center">
-              <p className="text-2xl font-extrabold text-blue-900">3</p>
-              <p className="text-[11px] text-gray-600">Postulantes evaluados</p>
+              <p className="text-2xl font-extrabold text-blue-900">{candidatosFiltrados.length}</p>
+              <p className="text-[11px] text-gray-600">Candidatos filtrados</p>
             </div>
           </div>
 
+          <section className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-3">
+            <div>
+              <label htmlFor="buscar-candidato" className="mb-1 block text-xs font-semibold text-gray-700">Buscar candidato</label>
+              <input
+                id="buscar-candidato"
+                type="search"
+                value={busqueda}
+                onChange={(event) => setBusqueda(event.target.value)}
+                placeholder="Código, experiencia, estudios…"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label htmlFor="compatibilidad-minima" className="mb-1 block text-xs font-semibold text-gray-700">Compatibilidad mínima</label>
+              <select
+                id="compatibilidad-minima"
+                value={compatibilidadMinima}
+                onChange={(event) => setCompatibilidadMinima(event.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs"
+              >
+                <option value="0">Todos los puntajes</option>
+                <option value="70">70% o más</option>
+                <option value="80">80% o más</option>
+                <option value="90">90% o más</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="estado-candidato" className="mb-1 block text-xs font-semibold text-gray-700">Estado</label>
+              <select
+                id="estado-candidato"
+                value={estadoFiltro}
+                onChange={(event) => setEstadoFiltro(event.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs"
+              >
+                <option>Todos</option>
+                <option>Sugerido</option>
+                <option>En revisión</option>
+                <option>Pendiente</option>
+              </select>
+            </div>
+          </section>
+
           {/* Lista de Postulantes Anónimos */}
           <div className="space-y-4">
-            {candidatos.map((cand) => (
+            {candidatosFiltrados.map((cand) => (
               <div 
                 key={cand.codigo}
                 className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5"
@@ -171,6 +273,16 @@ export default function CandidatosCompatibles() {
                 </div>
               </div>
             ))}
+            {!cargando && solicitudSeleccionada && candidatosFiltrados.length === 0 && (
+              <p className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-600">
+                No hay candidatos de demostración que coincidan con la solicitud y los filtros seleccionados.
+              </p>
+            )}
+            {!cargando && solicitudes.length === 0 && !error && (
+              <p className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-600">
+                No hay solicitudes activas para evaluar candidatos.
+              </p>
+            )}
           </div>
         </main>
       </div>

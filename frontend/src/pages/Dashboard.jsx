@@ -1,10 +1,61 @@
 import UserDropdown from '../components/UserDropdown';
 import { useNavigate, Link } from 'react-router-dom';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { apiRequest } from '../lib/api';
 
+const estadoSolicitud = {
+  pending: { label: 'Pendiente', className: 'bg-amber-100 text-amber-800' },
+  in_review: { label: 'En revisión', className: 'bg-blue-100 text-blue-800' },
+  approved: { label: 'Aprobada', className: 'bg-emerald-100 text-emerald-800' },
+  rejected: { label: 'Rechazada', className: 'bg-red-100 text-red-800' },
+  completed: { label: 'Completada', className: 'bg-gray-100 text-gray-700' },
+};
 
 function Dashboard() {
   const navigate = useNavigate();
+  const [dashboard, setDashboard] = useState({ summary: null, requests: [] });
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    apiRequest('/dashboard')
+      .then((result) => {
+        if (active) setDashboard(result);
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError instanceof TypeError
+            ? 'No se pudo conectar con el servidor. Verifique que el backend y PostgreSQL estén disponibles.'
+            : requestError.message);
+        }
+      })
+      .finally(() => {
+        if (active) setCargando(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const summary = dashboard.summary;
+  const metricValue = (value) => error ? '—' : cargando ? '…' : (value ?? 0);
+  const formatDate = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-PE');
+  };
+
+  const cerrarSesion = async () => {
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' });
+      navigate('/');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
@@ -61,7 +112,7 @@ function Dashboard() {
 
         {/* Botón Salir */}
         <div className="p-3 border-t border-blue-900">
-          <button onClick={() => navigate('/')} className="w-full text-left py-2 px-3 rounded hover:bg-red-900/50 text-sm font-medium text-red-300 flex items-center gap-2">
+          <button onClick={cerrarSesion} className="w-full text-left py-2 px-3 rounded hover:bg-red-900/50 text-sm font-medium text-red-300 flex items-center gap-2">
             ❌​ Cerrar sesión
           </button>
         </div>
@@ -83,9 +134,15 @@ function Dashboard() {
           
           
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">¡Buenos días, Moly Valencia!</h2>
+            <h2 className="text-2xl font-bold text-gray-800">Resumen de gestión</h2>
             <p className="text-xs text-gray-500 mt-1">Resumen de la gestión de personal</p>
           </div>
+
+          {error && (
+            <div role="alert" className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
           {/* Tarjetas de Métricas (Números Centrados) */}
           <div className="grid grid-cols-4 gap-4">
@@ -94,7 +151,7 @@ function Dashboard() {
                 <span className="p-1 bg-blue-50 text-blue-800 rounded-lg text-base ">📄</span>
                 <p className="text-xs font-semibold text-gray-500 ">Solicitudes pendientes</p> 
               </div>
-              <p className="text-3xl font-bold text-blue-900 my-1 text-center">04</p>
+              <p className="text-3xl font-bold text-blue-900 my-1 text-center">{metricValue(summary?.pending_requests)}</p>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 border-b-4 border-b-amber-500 flex flex-col items-center justify-center text-center">
@@ -102,7 +159,7 @@ function Dashboard() {
                 <span className="p-1.5 bg-amber-50 text-amber-600 rounded-lg text-base shrink-0">📌</span>
                 <p className="text-xs font-semibold text-gray-500 w-full">Validaciones pendientes</p>          
               </div>
-              <p className="text-3xl font-bold text-amber-600 my-1 text-center">07</p>
+              <p className="text-3xl font-bold text-amber-600 my-1 text-center">{metricValue(summary?.pending_validations)}</p>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 border-b-4 border-b-emerald-500 flex flex-col items-center justify-center text-center">
@@ -110,7 +167,7 @@ function Dashboard() {
                 <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-base shrink-0">📝</span>
                 <p className="text-xs font-semibold text-gray-500 w-full">Evaluaciones pendientes</p>
               </div>
-              <p className="text-3xl font-bold text-emerald-600 my-1 text-center">03</p>
+              <p className="text-3xl font-bold text-emerald-600 my-1 text-center">{metricValue(summary?.pending_evaluations)}</p>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 border-b-4 border-b-purple-700 flex flex-col items-center justify-center text-center">
@@ -118,7 +175,7 @@ function Dashboard() {
                 <span className="p-1.5 bg-purple-50 text-purple-700 rounded-lg text-base shrink-0">👥</span>
                 <p className="text-xs font-semibold text-gray-500 w-full">Asignaciones realizadas</p>
               </div>
-              <p className="text-3xl font-bold text-purple-700 my-1 text-center">12</p>
+              <p className="text-3xl font-bold text-purple-700 my-1 text-center">{metricValue(summary?.completed_assignments)}</p>
             </div>
           </div>
 
@@ -146,46 +203,32 @@ function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  <tr>
-                    <td className="py-2.5 font-bold text-gray-700">SC-001</td>
-                    <td className="py-2.5">Gerencia de Administración Tributaria</td>
-                    <td className="py-2.5">Subgerencia de Fiscalización y Ejecución Coactiva</td>
-                    <td className="py-2.5">31/08/2026</td>
-                    <td className="py-2.5"><span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-bold">Validación...</span></td>
-                    <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 font-bold text-gray-700">SC-002</td>
-                    <td className="py-2.5">Gerencia de Desarrollo Territorial e Infraestructura   </td>
-                    <td className="py-2.5">Subgerencia de Infraestructura</td>
-                    <td className="py-2.5">30/08/2026</td>
-                    <td className="py-2.5"><span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded font-bold">En revisión</span></td>
-                    <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 font-bold text-gray-700">SC-003</td>
-                    <td className="py-2.5">Gerencia de Desarrollo Económico</td>
-                    <td className="py-2.5">Subgerencia de Servicios Municipales</td>
-                    <td className="py-2.5">29/08/2026</td>
-                    <td className="py-2.5"><span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-bold">Validación...</span></td>
-                    <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 font-bold text-gray-700">SC-004</td>
-                    <td className="py-2.5">Gerencia de Servicios Municipales y Gestión Ambiental</td>
-                    <td className="py-2.5">Unidad de Tecnologías de Información</td>
-                    <td className="py-2.5">28/08/2026</td>
-                    <td className="py-2.5"><span className="bg-gray-100 text-gray-700 text-[10px] px-2 py-0.5 rounded font-bold">Pendiente</span></td>
-                    <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 font-bold text-gray-700">SC-005</td>
-                    <td className="py-2.5">Gerencia de Desarrollo Social</td>
-                    <td className="py-2.5">Unidad de Gestión de Recursos Humanos</td>
-                    <td className="py-2.5">27/08/2026</td>
-                    <td className="py-2.5"><span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-bold">Aprobado</span></td>
-                    <td className="py-2.5 text-right"><button className="text-blue-700 font-semibold">Ver</button></td>
-                  </tr>
+                  {dashboard.requests.map((request) => {
+                    const status = estadoSolicitud[request.status] || estadoSolicitud.pending;
+                    return (
+                      <tr key={request.id}>
+                        <td className="py-2.5 font-bold text-gray-700">{request.code}</td>
+                        <td className="py-2.5">{request.department}</td>
+                        <td className="py-2.5">{request.position_title}</td>
+                        <td className="py-2.5">{formatDate(request.created_at)}</td>
+                        <td className="py-2.5">
+                          <span className={`${status.className} text-[10px] px-2 py-0.5 rounded font-bold`}>
+                            {status.label}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <Link to="/solicitudes-cobertura" className="text-blue-700 font-semibold">Ver</Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!cargando && !error && dashboard.requests.length === 0 && (
+                    <tr>
+                      <td className="py-4 text-center text-gray-500" colSpan="6">
+                        No hay solicitudes registradas.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -198,18 +241,39 @@ function Dashboard() {
                   ⚠️ Alertas
                 </h3>
                 <div className="space-y-4 text-xs">
-                  <div className="p-3 bg-amber-50 border-l-4 border-amber-500 rounded text-amber-900 shadow-sm">
-                    <p className="font-semibold leading-relaxed">2 trabajadores tienen documentación pendiente</p>
-                  </div>
-                  <div className="p-3 bg-amber-50 border-l-4 border-amber-500 rounded text-amber-900 shadow-sm">
-                    <p className="font-semibold leading-relaxed">1 evaluación técnica está pendiente</p>
-                  </div>
-                  <div className="p-3 bg-blue-50 border-l-4 border-blue-500 rounded text-blue-900 shadow-sm">
-                    <p className="font-semibold leading-relaxed">Hay 1 solicitud próxima a vencer</p>
-                  </div>
+                  {!cargando && summary && (
+                    <>
+                      {summary.pending_documents > 0 && (
+                        <div className="p-3 bg-amber-50 border-l-4 border-amber-500 rounded text-amber-900 shadow-sm">
+                          <p className="font-semibold leading-relaxed">
+                            {summary.pending_documents} documento(s) pendiente(s) de validación
+                          </p>
+                        </div>
+                      )}
+                      {summary.pending_technical_evaluations > 0 && (
+                        <div className="p-3 bg-amber-50 border-l-4 border-amber-500 rounded text-amber-900 shadow-sm">
+                          <p className="font-semibold leading-relaxed">
+                            {summary.pending_technical_evaluations} evaluación(es) técnica(s) pendiente(s)
+                          </p>
+                        </div>
+                      )}
+                      {summary.expiring_requests > 0 && (
+                        <div className="p-3 bg-blue-50 border-l-4 border-blue-500 rounded text-blue-900 shadow-sm">
+                          <p className="font-semibold leading-relaxed">
+                            {summary.expiring_requests} solicitud(es) próxima(s) a vencer
+                          </p>
+                        </div>
+                      )}
+                      {!summary.pending_documents && !summary.pending_technical_evaluations && !summary.expiring_requests && (
+                        <p className="text-gray-500">No hay alertas pendientes.</p>
+                      )}
+                    </>
+                  )}
                 </div>
                 <div className="mt-4 text-right">
-                  <a href="#" className="text-xs font-semibold text-blue-700 hover:underline">Ver todas las alertas &gt;</a>
+                  <Link to="/validacion-ocr" className="text-xs font-semibold text-blue-700 hover:underline">
+                    Ver documentos pendientes &gt;
+                  </Link>
                 </div>
               </div>
 
@@ -229,7 +293,7 @@ function Dashboard() {
                     <span className="text-xl">🛡️</span>
                     <span className="text-xs font-semibold text-gray-700">Validar documento</span>
                   </button>
-                  <button onClick={() => alert("Módulo de Informes en desarrollo")} className="p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition flex flex-col items-center justify-center gap-1.5 bg-gray-50">
+                  <button onClick={() => navigate('/informes')} className="p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition flex flex-col items-center justify-center gap-1.5 bg-gray-50">
                     <span className="text-xl">📊</span>
                     <span className="text-xs font-semibold text-gray-700">Generar reporte</span>
                   </button>

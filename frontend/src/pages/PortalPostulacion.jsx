@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { apiRequest } from '../lib/api';
 
 const initialForm = {
   requestId: '',
@@ -9,17 +10,6 @@ const initialForm = {
   phone: '',
   demoConfirmation: false,
 };
-
-async function apiRequest(path, options = {}) {
-  const response = await fetch(`/api${path}`, options);
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(result.message || 'No se pudo completar la solicitud.');
-  }
-
-  return result;
-}
 
 export default function PortalPostulacion() {
   const [openings, setOpenings] = useState([]);

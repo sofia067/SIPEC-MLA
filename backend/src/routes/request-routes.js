@@ -1,17 +1,28 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authenticate.js';
+import { requestRepository } from '../repositories/request-repository.js';
 import { requestService } from '../services/request-service.js';
 
 const requestSchema = z.object({
   department: z.string().trim().min(2).max(160),
   positionTitle: z.string().trim().min(2).max(160),
   reason: z.string().trim().min(10).max(4000),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
   requiredBy: z.union([z.literal(''), z.iso.date()]).optional().transform((value) => value || null),
 });
 
 export function createRequestRouter() {
   const router = Router();
+
+  router.get('/public/applications/openings', async (req, res, next) => {
+    try {
+      return res.json({ openings: await requestRepository.listPublicOpenings() });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   router.use(authenticate);
 
   router.get('/dashboard', async (req, res, next) => {

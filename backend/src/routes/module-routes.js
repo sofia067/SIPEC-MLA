@@ -29,6 +29,13 @@ const profileSchema = z.object({
   title: nonEmptyText(160),
   department: nonEmptyText(160),
   level: nonEmptyText(80),
+  profileCode: z.string().trim().max(32).optional().default(''),
+  referenceSalary: z.number().min(0).max(99999999.99).nullable().optional(),
+  academicFormation: z.string().trim().max(4000).optional().default(''),
+  generalExperience: z.string().trim().max(1000).optional().default(''),
+  specificExperience: z.string().trim().max(1000).optional().default(''),
+  technicalKnowledge: z.array(nonEmptyText(1000)).max(30).optional().default([]),
+  responsibilities: z.array(nonEmptyText(2000)).max(30).optional().default([]),
   principalRequirements: z.string().trim().max(4000).default(''),
   description: z.string().trim().max(4000).default(''),
   status: z.enum(['active', 'inactive']).default('active'),
@@ -41,6 +48,7 @@ const requestDetailsSchema = z.object({
   department: nonEmptyText(160),
   positionTitle: nonEmptyText(160),
   reason: z.string().trim().min(10).max(4000),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
   requiredBy: z.union([z.literal(''), z.iso.date()]).optional().transform((value) => value || null),
 });
 const documentSchema = z.object({
@@ -57,8 +65,8 @@ const evaluationSchema = z.object({
   workerId: z.union([z.literal(''), idSchema]).optional().default(''),
   evaluationName: nonEmptyText(160).default('Evaluación técnica'),
   candidateName: z.string().trim().max(160).default(''),
-  notes: z.string().trim().max(4000).default(''),
-  score: z.union([z.literal(''), z.coerce.number().min(0).max(100)]).optional().transform((value) => value === '' ? null : value),
+  notes: z.string().trim().max(40000).default(''),
+  score: z.union([z.literal(''), z.null(), z.coerce.number().min(0).max(100)]).optional().transform((value) => value === '' ? null : value),
   status: z.enum(['pending', 'completed']).default('pending'),
 }).refine((data) => data.requestId || data.workerId, {
   message: 'Vincula la evaluación a una solicitud o a un trabajador.',
@@ -84,6 +92,15 @@ const updateUserSchema = z.object({
   password: z.union([z.literal(''), z.string().min(12).max(256)]).optional().default(''),
   isActive: z.boolean(),
 });
+const systemSettingsSchema = z.object({
+  organizationName: nonEmptyText(200),
+  fiscalYear: z.number().int().min(2000).max(2100),
+  supportEmail: z.union([z.literal(''), z.email().max(254)]).default(''),
+  maxUploadMb: z.number().int().min(1).max(50),
+  passingScore: z.number().int().min(0).max(100),
+  declarationDeadlineDays: z.number().int().min(1).max(90),
+});
+const departmentSchema = z.object({ name: nonEmptyText(160) });
 
 const requireId = (rawId) => {
   const parsed = idSchema.safeParse(rawId);
@@ -133,6 +150,13 @@ export function createModuleRouter() {
   });
 
   router.get('/profiles', async (req, res) => res.json({ profiles: await modulesRepository.listProfiles() }));
+  router.get('/profiles/:id', async (req, res) => {
+    const profile = await findOr404(
+      () => modulesRepository.getProfile(requireId(req.params.id)),
+      'No se encontró el perfil solicitado.',
+    );
+    res.json({ profile });
+  });
   router.post('/profiles', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
     const input = profileSchema.parse(req.body);
     res.status(201).json({ id: await modulesRepository.createProfile(input, req.user.id) });
@@ -256,6 +280,10 @@ export function createModuleRouter() {
     res.json({ events: await modulesRepository.listAuditEvents() });
   });
 
+  router.get('/system-info', async (req, res) => {
+    res.json({ system: await modulesRepository.getSystemInfo() });
+  });
+
   router.get('/settings/users', authorize('admin'), async (req, res) => {
     res.json({ users: await modulesRepository.listUsers() });
   });
@@ -283,6 +311,35 @@ export function createModuleRouter() {
     const id = requireId(req.params.id);
     if (id === req.user.id) throw new AppError(400, 'CANNOT_DEACTIVATE_SELF', 'No puedes desactivar tu propia cuenta.');
     await findOr404(() => modulesRepository.deactivateUser(id, req.user.id), 'No existe el usuario o no puede desactivarse.');
+    res.status(204).end();
+  });
+  router.get('/settings/system', authorize('admin'), async (req, res) => {
+    res.json({ settings: await modulesRepository.getSystemSettings() });
+  });
+  router.patch('/settings/system', authorize('admin'), async (req, res) => {
+    const input = systemSettingsSchema.parse(req.body);
+    res.json({ settings: await modulesRepository.updateSystemSettings(input, req.user.id) });
+  });
+  router.get('/settings/departments', authorize('admin'), async (req, res) => {
+    res.json({ departments: await modulesRepository.listDepartments() });
+  });
+  router.post('/settings/departments', authorize('admin'), async (req, res) => {
+    const { name } = departmentSchema.parse(req.body);
+    res.status(201).json({ department: await modulesRepository.createDepartment(name, req.user.id) });
+  });
+  router.patch('/settings/departments/:id', authorize('admin'), async (req, res) => {
+    const { name } = departmentSchema.parse(req.body);
+    const department = await modulesRepository.updateDepartment(
+      requireId(req.params.id),
+      name,
+      req.user.id,
+    );
+    res.json({ department: await findOr404(() => department) });
+  });
+  router.delete('/settings/departments/:id', authorize('admin'), async (req, res) => {
+    await findOr404(
+      () => modulesRepository.deleteDepartment(requireId(req.params.id), req.user.id),
+    );
     res.status(204).end();
   });
 

@@ -1,5 +1,6 @@
- import React from 'react';
+ import React, { useState } from 'react';
  import { NavLink, useNavigate } from 'react-router-dom';
+ import { apiRequest } from '../lib/api';
 
  const enlaces = [
    { ruta: '/dashboard', icono: '🏚️', texto: 'Inicio', exacto: true },
@@ -16,6 +17,17 @@
 
  export default function Sidebar() {
    const navigate = useNavigate();
+   const [logoutError, setLogoutError] = useState('');
+
+   const cerrarSesion = async () => {
+     setLogoutError('');
+     try {
+       await apiRequest('/auth/logout', { method: 'POST' });
+       navigate('/');
+     } catch (error) {
+       setLogoutError(error.message);
+     }
+   };
 
    return (
      <aside className="w-64 bg-blue-950 text-white flex flex-col justify-between shrink-0">
@@ -48,8 +60,9 @@
       </div>
 
       <div className="p-3 border-t border-blue-900">
+        {logoutError && <p role="alert" className="mb-2 text-xs text-red-300">{logoutError}</p>}
         <button 
-          onClick={() => navigate('/')} 
+          onClick={cerrarSesion}
           className="w-full text-left py-2 px-3 rounded hover:bg-red-900/50 text-sm font-medium text-red-300 flex items-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           ❌ Cerrar sesión

@@ -1,51 +1,47 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiRequest } from '../lib/api';
 
 function Login() {
   const [credenciales, setCredenciales] = useState({ usuario: '', password: '', rol: '' });
-  const [intentos, setIntentos] = useState(0);
-  const [bloqueado, setBloqueado] = useState(false);
+  const [iniciandoSesion, setIniciandoSesion] = useState(false);
   const [mensajeError, setMensajeError] = useState('');
   const navigate = useNavigate();
-
-  const MAX_INTENTOS = 3;
 
   const manejarCambio = (e) => {
     setCredenciales({ ...credenciales, [e.target.name]: e.target.value });
   };
 
-  const manejarIngreso = (e) => {
+  const manejarIngreso = async (e) => {
     e.preventDefault();
 
-    // 1. Validar estrictamente que ningún campo esté vacío
     if (!credenciales.usuario.trim() || !credenciales.password.trim() || !credenciales.rol) {
       setMensajeError('Por favor, complete su usuario, contraseña y seleccione su rol.');
       return;
     }
 
-    // 2. Simulación de validación (aquí iría la consulta a tu API/Backend)
-    const esValido = credenciales.usuario === 'admin' && credenciales.password === '123456';
+    setIniciandoSesion(true);
+    setMensajeError('');
 
-    if (esValido) {
-      setMensajeError('');
+    try {
+      await apiRequest('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: credenciales.usuario,
+          password: credenciales.password,
+          role: credenciales.rol,
+        }),
+      });
+
       navigate('/dashboard');
-    } else {
-      const nuevosIntentos = intentos + 1;
-      setIntentos(nuevosIntentos);
-
-      if (nuevosIntentos >= MAX_INTENTOS) {
-        setBloqueado(true);
-        setMensajeError(`Ha superado el límite de ${MAX_INTENTOS} intentos. Intente nuevamente en 30 segundos.`);
-        
-        // Desbloquear después de 30 segundos
-        setTimeout(() => {
-          setBloqueado(false);
-          setIntentos(0);
-          setMensajeError('');
-        }, 30000);
-      } else {
-        setMensajeError(`Credenciales o rol incorrectos. Intentos restantes: ${MAX_INTENTOS - nuevosIntentos}`);
-      }
+    } catch (error) {
+      setMensajeError(
+        error instanceof TypeError
+          ? 'No se pudo conectar con el servidor. Verifique que el backend esté ejecutándose.'
+          : error.message,
+      );
+    } finally {
+      setIniciandoSesion(false);
     }
   };
 
@@ -87,7 +83,7 @@ function Login() {
                 placeholder="Ingrese su usuario"
                 value={credenciales.usuario}
                 onChange={manejarCambio}
-                disabled={bloqueado}
+                disabled={iniciandoSesion}
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-800 border-gray-300 disabled:bg-gray-100"
                 required
               />
@@ -101,7 +97,7 @@ function Login() {
                 placeholder="Ingrese su contraseña"
                 value={credenciales.password}
                 onChange={manejarCambio}
-                disabled={bloqueado}
+                disabled={iniciandoSesion}
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-800 border-gray-300 disabled:bg-gray-100"
                 required
               />
@@ -113,7 +109,7 @@ function Login() {
                 name="rol"
                 value={credenciales.rol}
                 onChange={manejarCambio}
-                disabled={bloqueado}
+                disabled={iniciandoSesion}
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-800 border-gray-300 bg-white text-gray-700 disabled:bg-gray-100"
                 required
               >
@@ -134,11 +130,11 @@ function Login() {
 
             <button 
               type="submit" 
-              disabled={bloqueado}
+              disabled={iniciandoSesion}
               className={`w-full font-bold py-2.5 rounded-md transition duration-200 mt-2 shadow text-white ${
-                bloqueado ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'
+                iniciandoSesion ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'
               }`}>
-              {bloqueado ? 'Acceso temporalmente bloqueado' : 'Iniciar sesión'}
+              {iniciandoSesion ? 'Ingresando...' : 'Iniciar sesión'}
             </button>
           </form>
         </div>

@@ -27,6 +27,7 @@ function App() {
        <Route path="/solicitudes-cobertura" element={<SolicitudesCobertura />} />
        <Route path="/nueva-solicitud" element={<SolicitudesCobertura />} />
         <Route path="/perfil-puesto" element={<PerfilPuesto />} />
+        <Route path="/perfil-puesto/detalle/:id" element={<PerfilPuestoDetalle />} />
         <Route path="/perfil-puesto/detalle" element={<PerfilPuestoDetalle />} />
        <Route path="/mi-perfil" element={<MiPerfil />} />
        <Route path="/candidatos-compatibles" element={<CandidatosCompatibles />} />

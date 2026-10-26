@@ -23,11 +23,27 @@ export const authRepository = {
   },
 
   async createSession(tokenHash, userId, expiresAt) {
-    await pool.query('DELETE FROM user_sessions WHERE expires_at <= now()');
-    await pool.query(
-      'INSERT INTO user_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)',
-      [tokenHash, userId, expiresAt],
-    );
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM user_sessions WHERE expires_at <= now()');
+      await client.query(
+        'INSERT INTO user_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)',
+        [tokenHash, userId, expiresAt],
+      );
+      await client.query(
+        `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id)
+         VALUES ($1, 'auth.login', 'session', NULL)`,
+        [userId],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 
   async deleteSession(tokenHash) {

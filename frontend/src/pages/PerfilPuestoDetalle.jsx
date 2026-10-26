@@ -1,76 +1,192 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Sidebar from '../components/sidebar';
+import UserDropdown from '../components/UserDropdown';
+import { apiRequest } from '../lib/api';
 
-export default function PerfilPuestoDetalle() {
+export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = {}) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { id: routeProfileId } = useParams();
+  const [searchParams] = useSearchParams();
+  const profileId = profileProp?.id || routeProfileId || searchParams.get('id');
+  const profileFromNavigation = profileProp || location.state?.profile;
+  const isModal = Boolean(onClose);
   
   // Estado para controlar qué pestaña está activa
   const [activeTab, setActiveTab] = useState('requisitos');
   
   // Estado para activar/desactivar el modo edición
   const [modoEdicion, setModoEdicion] = useState(false);
+  const [datosPerfil, setDatosPerfil] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+  const [mensaje, setMensaje] = useState('');
 
-  
-  const [datosPerfil, setDatosPerfil] = useState({
-    puesto: 'Técnico de Fiscalización',
-    area: 'Gerencia de Administración Tributaria',
-    nivel: 'Técnico Operativo',
-    codigo: 'PUE-GAT-002',
-    estado: 'Activo',
-    // Información General
-    mision: 'Ejecutar las acciones de fiscalización tributaria y administrativa en el distrito para verificar el cumplimiento de las ordenanzas municipales.',
-    reportaA: 'Subgerente de Fiscalización y Ejecución Coactiva',
-    supervisaA: 'Ninguno',
-    // Requisitos
-    formacion: 'Técnico o universitario en Administración, Derecho, Ingeniería o afines.',
-    experiencia: '1 año en funciones similares de fiscalización en sector público o privado.',
-    conocimientos: 'Normas municipales, procedimientos sancionadores, Ley de Procedimiento Administrativo General (LPAG).',
-    otrosRequisitos: 'Manejo de MS Office a nivel usuario y disponibilidad para trabajo de campo.',
-    // Responsabilidades
-    responsabilidades: [
-      'Realizar inspecciones de campo para verificar licencias de funcionamiento y tributos municipales.',
-      'Redactar actas de fiscalización, papeletas de infracción y reportes técnicos.',
-      'Notificar resoluciones y documentos administrativos a los contribuyentes del distrito.',
-      'Atender denuncias vecinales relacionadas con infracciones a las normas municipales.'
-    ]
+  const convertirPerfil = (profile) => ({
+    id: profile.id,
+    puesto: profile.title,
+    area: profile.department,
+    nivel: profile.level,
+    codigo: profile.profile_code || profile.id,
+    remuneracion: profile.reference_salary === null ? '' : String(profile.reference_salary ?? ''),
+    estado: profile.status === 'active' ? 'Activo' : 'Inactivo',
+    mision: profile.description || '',
+    reportaA: '',
+    supervisaA: '',
+    formacion: profile.principal_requirements || '',
+    formacionAcademica: profile.academic_formation || '',
+    experienciaGeneral: profile.general_experience || '',
+    experienciaEspecifica: profile.specific_experience || '',
+    conocimientos: profile.technical_knowledge || [],
+    funciones: profile.responsibilities || [],
+    competencies: profile.competencies || [],
   });
 
-  return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
-      {/* Sidebar reutilizado */}
-      <Sidebar />
+  const editarLista = (key, value) => {
+    setDatosPerfil({
+      ...datosPerfil,
+      [key]: value.split('\n'),
+    });
+  };
 
-      {/* Contenido Principal */}
-      <div className="flex-1 flex flex-col overflow-y-auto">
-        {/* Header */}
-        <header className="bg-white border-b px-8 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-blue-950">SIPEC-MLA</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="text-gray-400 hover:text-gray-600">🔔</button>
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-8 h-8 rounded-full bg-blue-900 text-white font-bold flex items-center justify-center text-xs">
-                CR
-              </div>
-              <div className="text-left leading-tight">
-                <p className="font-semibold text-gray-800">Carlos Ramírez</p>
-                <p className="text-xs text-gray-500">Jefe de Área</p>
-              </div>
-            </div>
-          </div>
-        </header>
+  useEffect(() => {
+    let active = true;
+    setCargando(true);
+    setDatosPerfil(null);
+    setError('');
 
-        {/* Panel Ficha de Perfil */}
-        <main className="p-8 space-y-6">
-          {/* Botón de volver */}
-          <button 
-            onClick={() => navigate('/perfil-puesto')} 
-            className="text-xs font-semibold text-gray-500 hover:text-blue-900 flex items-center gap-1 transition-colors"
-          >
-            ← Volver a la lista
-          </button>
+    if (profileFromNavigation && (!profileId || String(profileFromNavigation.id) === String(profileId))) {
+      setDatosPerfil(convertirPerfil(profileFromNavigation));
+      setCargando(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!profileId) {
+      setError('No se indicó qué perfil se desea consultar.');
+      setCargando(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    const cargarPerfil = async () => {
+      let profile;
+      try {
+        ({ profile } = await apiRequest(`/profiles/${encodeURIComponent(profileId)}`));
+      } catch (directRequestError) {
+        const { profiles } = await apiRequest('/profiles');
+        profile = profiles.find((item) => String(item.id) === profileId);
+        if (!profile) throw directRequestError;
+      }
+
+      if (!profile) throw new Error('No se encontró el perfil solicitado.');
+      return profile;
+    };
+
+    cargarPerfil()
+      .then((profile) => {
+        if (active) setDatosPerfil(convertirPerfil(profile));
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message);
+      })
+      .finally(() => {
+        if (active) setCargando(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [profileFromNavigation, profileId]);
+
+  useEffect(() => {
+    if (!isModal) return undefined;
+    const cerrarConEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', cerrarConEscape);
+    return () => window.removeEventListener('keydown', cerrarConEscape);
+  }, [isModal, onClose]);
+
+  const guardarPerfil = async () => {
+    if (!datosPerfil) return;
+    setGuardando(true);
+    setError('');
+    setMensaje('');
+    try {
+      await apiRequest(`/profiles/${datosPerfil.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: datosPerfil.puesto,
+          department: datosPerfil.area,
+          level: datosPerfil.nivel,
+          profileCode: datosPerfil.codigo,
+          referenceSalary: datosPerfil.remuneracion === '' ? null : Number(datosPerfil.remuneracion),
+          academicFormation: datosPerfil.formacionAcademica,
+          generalExperience: datosPerfil.experienciaGeneral,
+          specificExperience: datosPerfil.experienciaEspecifica,
+          technicalKnowledge: datosPerfil.conocimientos.filter((item) => item.trim()),
+          responsibilities: datosPerfil.funciones.filter((item) => item.trim()),
+          principalRequirements: datosPerfil.formacion,
+          description: datosPerfil.mision,
+          status: datosPerfil.estado === 'Activo' ? 'active' : 'inactive',
+          competencies: datosPerfil.competencies,
+        }),
+      });
+      setModoEdicion(false);
+      setMensaje('Perfil actualizado.');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (cargando) {
+    const loading = <p role="status" className="p-8 text-sm text-gray-600">Cargando perfil…</p>;
+    return isModal ? createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-3 sm:p-6">
+        <section role="dialog" aria-modal="true" aria-label="Ficha del puesto" className="w-full max-w-4xl rounded-xl bg-white shadow-2xl">
+          {loading}
+        </section>
+      </div>,
+      document.body,
+    ) : loading;
+  }
+  if (!datosPerfil) {
+    const errorContent = (
+      <main className="p-8 space-y-4">
+        <p role="alert" className="text-sm text-red-700">{error || 'No se encontró el perfil solicitado.'}</p>
+        {isModal
+          ? <button onClick={onClose} className="text-sm text-blue-900 underline">Cerrar</button>
+          : <button onClick={() => navigate('/perfil-puesto')} className="text-sm text-blue-900 underline">Volver a perfiles</button>}
+      </main>
+    );
+    return isModal ? createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-3 sm:p-6">
+        <section role="dialog" aria-modal="true" aria-label="Ficha del puesto" className="w-full max-w-4xl rounded-xl bg-white shadow-2xl">
+          {errorContent}
+        </section>
+      </div>,
+      document.body,
+    ) : errorContent;
+  }
+
+  const profileContent = (
+        <main className={`${isModal ? 'p-4 sm:p-6' : 'p-8'} space-y-6`}>
+          {!isModal && (
+            <button
+              onClick={() => navigate('/perfil-puesto')}
+              className="text-xs font-semibold text-gray-500 hover:text-blue-900 flex items-center gap-1 transition-colors"
+            >
+              ← Volver a la lista
+            </button>
+          )}
 
           {/* Header y botón de Edición */}
           <div className="flex items-center justify-between">
@@ -98,17 +214,18 @@ export default function PerfilPuestoDetalle() {
               </button>
               {modoEdicion && (
                 <button 
-                  onClick={() => {
-                    setModoEdicion(false);
-                    alert("Cambios guardados localmente");
-                  }}
+                  onClick={guardarPerfil}
+                  disabled={guardando}
                   className="text-xs font-semibold px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                 >
-                  💾 Guardar
+                  {guardando ? 'Guardando…' : '💾 Guardar'}
                 </button>
               )}
             </div>
           </div>
+
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+          {mensaje && <p role="status" className="text-sm text-emerald-700">{mensaje}</p>}
 
           {/* Pestañas de Navegación */}
           <div className="border-b border-gray-200 flex gap-8 text-sm">
@@ -149,31 +266,53 @@ export default function PerfilPuestoDetalle() {
           {/* Informacion general */}
           {activeTab === 'general' && (
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-5">
-              <h3 className="font-bold text-gray-800 text-sm border-b pb-2">Estructura Organizacional y Misión</h3>
+              <h3 className="font-bold text-gray-800 text-sm border-b pb-2">Estructura Organizacional y Datos del Puesto</h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 text-xs">
                 <div>
                   <label className="font-semibold text-gray-600 block">Código del Puesto:</label>
-                  <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.codigo}</p>
+                  {modoEdicion ? (
+                    <input value={datosPerfil.codigo} onChange={(event) => setDatosPerfil({ ...datosPerfil, codigo: event.target.value })}
+                      className="w-full text-gray-800 mt-1 bg-white p-2 rounded border border-amber-400" />
+                  ) : (
+                    <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.codigo}</p>
+                  )}
                 </div>
                 <div>
                   <label className="font-semibold text-gray-600 block">Nivel Organizacional:</label>
-                  <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.nivel}</p>
+                  {modoEdicion ? (
+                    <input value={datosPerfil.nivel} onChange={(event) => setDatosPerfil({ ...datosPerfil, nivel: event.target.value })}
+                      className="w-full text-gray-800 mt-1 bg-white p-2 rounded border border-amber-400" />
+                  ) : (
+                    <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.nivel}</p>
+                  )}
                 </div>
                 <div>
                   <label className="font-semibold text-gray-600 block">Unidad Orgánica:</label>
                   <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.area}</p>
+                </div>
+                <div>
+                  <label className="font-semibold text-gray-600 block">Remuneración Referencial:</label>
+                  {modoEdicion ? (
+                    <input type="number" min="0" step="0.01" value={datosPerfil.remuneracion}
+                      onChange={(event) => setDatosPerfil({ ...datosPerfil, remuneracion: event.target.value })}
+                      className="w-full text-gray-800 mt-1 bg-white p-2 rounded border border-amber-400" />
+                  ) : (
+                    <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">
+                      {datosPerfil.remuneracion === '' ? 'No registrada' : `S/ ${Number(datosPerfil.remuneracion).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`}
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2">
                 <div>
                   <label className="font-semibold text-gray-600 block">Dependencia Jerárquica (Reporta a):</label>
-                  <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.reportaA}</p>
+                  <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.reportaA || 'No registrado'}</p>
                 </div>
                 <div>
                   <label className="font-semibold text-gray-600 block">Personal a Cargo (Supervisa a):</label>
-                  <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.supervisaA}</p>
+                  <p className="text-gray-800 font-medium mt-1 bg-gray-50 p-2 rounded border">{datosPerfil.supervisaA || 'No registrado'}</p>
                 </div>
               </div>
 
@@ -208,63 +347,44 @@ export default function PerfilPuestoDetalle() {
                       <span>🎓</span> Formación académica
                     </div>
                     {modoEdicion ? (
-                      <input 
-                        type="text" 
-                        value={datosPerfil.formacion} 
-                        onChange={(e) => setDatosPerfil({...datosPerfil, formacion: e.target.value})}
-                        className="w-full mt-1 border border-amber-400 p-2 rounded focus:outline-none text-xs"
-                      />
+                      <textarea rows={3} value={datosPerfil.formacionAcademica}
+                        onChange={(event) => setDatosPerfil({ ...datosPerfil, formacionAcademica: event.target.value })}
+                        className="w-full mt-1 border border-amber-400 p-2 rounded focus:outline-none text-xs" />
                     ) : (
-                      <p className="text-gray-600 mt-1 pl-6">{datosPerfil.formacion}</p>
+                      <p className="text-gray-600 mt-1 pl-6">{datosPerfil.formacionAcademica || datosPerfil.formacion || 'No registrada.'}</p>
                     )}
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-2 font-semibold text-gray-700">
-                      <span>💼</span> Experiencia mínima
-                    </div>
+                    <label className="font-semibold text-gray-700 block">Experiencia general</label>
                     {modoEdicion ? (
-                      <input 
-                        type="text" 
-                        value={datosPerfil.experiencia} 
-                        onChange={(e) => setDatosPerfil({...datosPerfil, experiencia: e.target.value})}
-                        className="w-full mt-1 border border-amber-400 p-2 rounded focus:outline-none text-xs"
-                      />
-                    ) : (
-                      <p className="text-gray-600 mt-1 pl-6">{datosPerfil.experiencia}</p>
-                    )}
+                      <textarea rows={2} value={datosPerfil.experienciaGeneral}
+                        onChange={(event) => setDatosPerfil({ ...datosPerfil, experienciaGeneral: event.target.value })}
+                        className="w-full mt-1 border border-amber-400 p-2 rounded text-xs" />
+                    ) : <p className="mt-1 text-gray-600">{datosPerfil.experienciaGeneral || 'No registrada.'}</p>}
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-2 font-semibold text-gray-700">
-                      <span>📚</span> Conocimientos técnicos
-                    </div>
+                    <label className="font-semibold text-gray-700 block">Experiencia específica</label>
                     {modoEdicion ? (
-                      <textarea 
-                        value={datosPerfil.conocimientos} 
-                        onChange={(e) => setDatosPerfil({...datosPerfil, conocimientos: e.target.value})}
-                        className="w-full mt-1 border border-amber-400 p-2 rounded focus:outline-none text-xs"
-                        rows={2}
-                      />
-                    ) : (
-                      <p className="text-gray-600 mt-1 pl-6">{datosPerfil.conocimientos}</p>
-                    )}
+                      <textarea rows={2} value={datosPerfil.experienciaEspecifica}
+                        onChange={(event) => setDatosPerfil({ ...datosPerfil, experienciaEspecifica: event.target.value })}
+                        className="w-full mt-1 border border-amber-400 p-2 rounded text-xs" />
+                    ) : <p className="mt-1 text-gray-600">{datosPerfil.experienciaEspecifica || 'No registrada.'}</p>}
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-2 font-semibold text-gray-700">
-                      <span>⚙️</span> Otros requisitos
-                    </div>
+                    <label className="font-semibold text-gray-700 block">Conocimientos técnicos / certificaciones</label>
                     {modoEdicion ? (
-                      <input 
-                        type="text" 
-                        value={datosPerfil.otrosRequisitos} 
-                        onChange={(e) => setDatosPerfil({...datosPerfil, otrosRequisitos: e.target.value})}
-                        className="w-full mt-1 border border-amber-400 p-2 rounded focus:outline-none text-xs"
-                      />
-                    ) : (
-                      <p className="text-gray-600 mt-1 pl-6">{datosPerfil.otrosRequisitos}</p>
-                    )}
+                      <textarea rows={5} value={datosPerfil.conocimientos.join('\n')}
+                        onChange={(event) => editarLista('conocimientos', event.target.value)}
+                        className="w-full mt-1 border border-amber-400 p-2 rounded text-xs"
+                        placeholder="Un requisito por línea" />
+                    ) : datosPerfil.conocimientos.length ? (
+                      <ul className="mt-1 list-disc space-y-1 pl-5 text-gray-600">
+                        {datosPerfil.conocimientos.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                      </ul>
+                    ) : <p className="mt-1 text-gray-500">No registrados.</p>}
                   </div>
                 </div>
               </div>
@@ -274,24 +394,36 @@ export default function PerfilPuestoDetalle() {
                 <h3 className="font-bold text-gray-800 text-sm border-b pb-2">Competencias Requeridas</h3>
 
                 <div className="space-y-3 text-xs">
-                  {[
-                    { nombre: 'Atención al ciudadano', nivel: 'Nivel 3' },
-                    { nombre: 'Análisis y evaluación', nivel: 'Nivel 3' },
-                    { nombre: 'Comunicación efectiva', nivel: 'Nivel 3' },
-                    { nombre: 'Trabajo en equipo', nivel: 'Nivel 2' },
-                    { nombre: 'Ética e integridad', nivel: 'Nivel 3' },
-                  ].map((comp, idx) => (
-                    <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-100">
-                      <span className="text-gray-700 font-medium">🎯 {comp.nombre}</span>
-                      <span className="bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
-                        {comp.nivel}
-                      </span>
+                  {datosPerfil.competencies.map((competency) => (
+                    <div key={competency.id || competency.name} className="py-2 border-b border-gray-100">
+                      <p className="text-gray-700 font-medium">🎯 {competency.name}</p>
+                      {competency.description && <p className="mt-1 text-gray-500">{competency.description}</p>}
                     </div>
                   ))}
+                  {datosPerfil.competencies.length === 0 && (
+                    <p className="text-gray-500">No hay competencias registradas para este perfil.</p>
+                  )}
                 </div>
 
+                {modoEdicion && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name = prompt('Nombre de la competencia:');
+                      if (name?.trim()) {
+                        setDatosPerfil({
+                          ...datosPerfil,
+                          competencies: [...datosPerfil.competencies, { name: name.trim(), description: '' }],
+                        });
+                      }
+                    }}
+                    className="text-xs font-semibold text-blue-900 hover:underline"
+                  >
+                    Agregar competencia
+                  </button>
+                )}
                 <div className="pt-2 text-[11px] text-gray-500 italic">
-                  Nivel mínimo requerido: 70% de cumplimiento global.
+                  Las competencias y descripciones se obtienen del registro del perfil.
                 </div>
               </div>
             </div>
@@ -300,46 +432,69 @@ export default function PerfilPuestoDetalle() {
           {/* Responsanilidades*/}
           {activeTab === 'responsabilidades' && (
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-              <div className="flex justify-between items-center border-b pb-2">
-                <h3 className="font-bold text-gray-800 text-sm">Funciones y Responsabilidades Principales</h3>
-                {modoEdicion && (
-                  <button 
-                    onClick={() => {
-                      const nueva = prompt("Escribe la nueva responsabilidad:");
-                      if (nueva) setDatosPerfil({...datosPerfil, responsabilidades: [...datosPerfil.responsabilidades, nueva]});
-                    }}
-                    className="text-xs text-blue-900 font-bold hover:underline"
-                  >
-                    ➕ Agregar función
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-3 text-xs">
-                {datosPerfil.responsabilidades.map((resp, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                    <span className="bg-blue-950 text-white font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0 text-[10px]">
-                      {index + 1}
-                    </span>
-                    <p className="text-gray-700 leading-relaxed flex-1">{resp}</p>
-                    {modoEdicion && (
-                      <button 
-                        onClick={() => {
-                          const filtradas = datosPerfil.responsabilidades.filter((_, i) => i !== index);
-                          setDatosPerfil({...datosPerfil, responsabilidades: filtradas});
-                        }}
-                        className="text-red-500 font-bold hover:text-red-700"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <h3 className="font-bold text-gray-800 text-sm border-b pb-2">Funciones principales</h3>
+              {modoEdicion ? (
+                <textarea rows={10} value={datosPerfil.funciones.join('\n')}
+                  onChange={(event) => editarLista('funciones', event.target.value)}
+                  className="w-full border border-amber-400 p-2 rounded text-xs"
+                  placeholder="Una función por línea" />
+              ) : datosPerfil.funciones.length ? (
+                <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed text-gray-700">
+                  {datosPerfil.funciones.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                </ol>
+              ) : (
+                <p className="text-gray-500 text-sm">No hay funciones registradas para este perfil.</p>
+              )}
             </div>
           )}
 
         </main>
+  );
+
+  if (isModal) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
+      >
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Ficha del puesto ${datosPerfil.puesto}`}
+          className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-gray-100 text-gray-800 shadow-2xl"
+        >
+          <header className="flex items-center justify-between border-b bg-white px-5 py-3 sm:px-7">
+            <h1 className="text-lg font-bold text-blue-950">Ficha completa del puesto</h1>
+            <button
+              type="button"
+              aria-label="Cerrar ficha"
+              onClick={onClose}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-lg leading-none text-gray-600 hover:bg-gray-100"
+            >
+              ×
+            </button>
+          </header>
+          <div className="min-h-0 overflow-y-auto">{profileContent}</div>
+        </section>
+      </div>,
+      document.body,
+    );
+  }
+
+  return (
+    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-y-auto">
+        <header className="bg-white border-b px-8 py-3 flex justify-between items-center">
+          <h1 className="text-xl font-bold text-blue-950">SIPEC-MLA</h1>
+          <div className="flex items-center gap-4">
+            <button className="text-gray-400 hover:text-gray-600">🔔</button>
+            <UserDropdown />
+          </div>
+        </header>
+        {profileContent}
       </div>
     </div>
   );
