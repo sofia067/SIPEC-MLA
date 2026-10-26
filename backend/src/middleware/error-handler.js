@@ -35,7 +35,7 @@ export function errorHandler(error, req, res, next) {
       error: {
         code: error.code,
         message: error.code === 'LIMIT_FILE_SIZE'
-          ? 'El archivo supera el tamaño máximo permitido (10 MB).'
+          ? `El archivo supera el tamaño máximo permitido (${error.uploadLimitMb ?? 10} MB).`
           : 'No se pudo procesar el archivo cargado.',
       },
     });

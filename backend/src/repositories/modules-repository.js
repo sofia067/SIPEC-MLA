@@ -12,6 +12,9 @@ const workerSelect = `
 
 const profileSelect = `
   SELECT p.id, p.title, p.description, p.level, p.principal_requirements,
+         p.profile_code, p.reference_salary, p.academic_formation,
+         p.general_experience, p.specific_experience, p.technical_knowledge,
+         p.responsibilities,
          p.status, p.created_at, p.updated_at,
          d.id AS department_id, d.name AS department,
          coalesce(json_agg(json_build_object('id', c.id, 'name', c.name, 'description', c.description))
@@ -131,6 +134,14 @@ export const modulesRepository = {
     return result.rows;
   },
 
+  async getProfile(id) {
+    const result = await pool.query(
+      `${profileSelect} WHERE p.id = $1 GROUP BY p.id, d.id`,
+      [id],
+    );
+    return result.rows[0] ?? null;
+  },
+
   async createProfile(input, actorId) {
     return withTransaction(async (client) => {
       const department = await client.query(
@@ -140,10 +151,14 @@ export const modulesRepository = {
       );
       const profile = await client.query(
         `INSERT INTO position_profiles
-           (department_id, title, description, level, principal_requirements, status)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+           (department_id, title, description, level, principal_requirements, status,
+            profile_code, reference_salary, academic_formation, general_experience,
+            specific_experience, technical_knowledge, responsibilities)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
         [department.rows[0].id, input.title, input.description, input.level,
-          input.principalRequirements, input.status],
+          input.principalRequirements, input.status, input.profileCode || null,
+          input.referenceSalary ?? null, input.academicFormation, input.generalExperience,
+          input.specificExperience, input.technicalKnowledge, input.responsibilities],
       );
       const profileId = profile.rows[0].id;
       for (const competency of input.competencies) {
@@ -166,10 +181,15 @@ export const modulesRepository = {
       );
       const result = await client.query(
         `UPDATE position_profiles SET department_id = $2, title = $3, description = $4,
-           level = $5, principal_requirements = $6, status = $7, updated_at = now()
+           level = $5, principal_requirements = $6, status = $7, profile_code = $8,
+           reference_salary = $9, academic_formation = $10, general_experience = $11,
+           specific_experience = $12, technical_knowledge = $13, responsibilities = $14,
+           updated_at = now()
          WHERE id = $1 RETURNING id`,
         [id, department.rows[0].id, input.title, input.description, input.level,
-          input.principalRequirements, input.status],
+          input.principalRequirements, input.status, input.profileCode || null,
+          input.referenceSalary ?? null, input.academicFormation, input.generalExperience,
+          input.specificExperience, input.technicalKnowledge, input.responsibilities],
       );
       if (!result.rowCount) return false;
       await client.query('DELETE FROM position_competencies WHERE position_id = $1', [id]);
@@ -211,9 +231,11 @@ export const modulesRepository = {
            ORDER BY d.created_at DESC`
         : `SELECT e.id, e.evaluation_name, e.candidate_name, e.notes, e.score,
                   e.status::text AS status, e.created_at, e.request_id, r.code AS request_code,
+                  p.title AS position_title,
                   e.worker_id, w.full_name AS worker_name
            FROM technical_evaluations e
            LEFT JOIN coverage_requests r ON r.id = e.request_id
+           LEFT JOIN position_profiles p ON p.id = r.position_id
            LEFT JOIN workers w ON w.id = e.worker_id
            ORDER BY e.created_at DESC`,
     );
@@ -478,10 +500,103 @@ export const modulesRepository = {
     return result.rows;
   },
 
+  async getSystemSettings() {
+    const result = await pool.query(
+      `SELECT organization_name, fiscal_year, support_email, max_upload_mb,
+              passing_score, declaration_deadline_days, updated_at
+       FROM system_settings WHERE id = 1`,
+    );
+    return result.rows[0];
+  },
+
+  async getSystemInfo() {
+    const result = await pool.query(
+      `SELECT organization_name, fiscal_year, support_email, passing_score,
+              declaration_deadline_days
+       FROM system_settings WHERE id = 1`,
+    );
+    return result.rows[0];
+  },
+
+  async updateSystemSettings(input, actorId) {
+    return withTransaction(async (client) => {
+      const result = await client.query(
+        `UPDATE system_settings SET organization_name = $1, fiscal_year = $2,
+           support_email = $3, max_upload_mb = $4, passing_score = $5,
+           declaration_deadline_days = $6, updated_at = now()
+         WHERE id = 1
+         RETURNING organization_name, fiscal_year, support_email, max_upload_mb,
+                   passing_score, declaration_deadline_days, updated_at`,
+        [input.organizationName, input.fiscalYear, input.supportEmail, input.maxUploadMb,
+          input.passingScore, input.declarationDeadlineDays],
+      );
+      await recordAudit(client, actorId, 'system_settings.updated', 'system_settings', null);
+      return result.rows[0];
+    });
+  },
+
+  async listDepartments() {
+    const result = await pool.query(
+      `SELECT d.id, d.name, d.created_at,
+              (SELECT count(*)::int FROM position_profiles p WHERE p.department_id = d.id) AS profile_count,
+              (SELECT count(*)::int FROM workers w WHERE w.department_id = d.id) AS worker_count,
+              (SELECT count(*)::int FROM coverage_requests r WHERE r.department_id = d.id) AS request_count
+       FROM departments d ORDER BY d.name`,
+    );
+    return result.rows;
+  },
+
+  async createDepartment(name, actorId) {
+    return withTransaction(async (client) => {
+      const result = await client.query(
+        'INSERT INTO departments (name) VALUES ($1) RETURNING id, name, created_at',
+        [name],
+      );
+      await recordAudit(client, actorId, 'department.created', 'department', result.rows[0].id);
+      return result.rows[0];
+    });
+  },
+
+  async updateDepartment(id, name, actorId) {
+    return withTransaction(async (client) => {
+      const current = await client.query('SELECT name FROM departments WHERE id = $1 FOR UPDATE', [id]);
+      if (!current.rowCount) return null;
+      const result = await client.query(
+        'UPDATE departments SET name = $2 WHERE id = $1 RETURNING id, name, created_at',
+        [id, name],
+      );
+      await client.query('UPDATE users SET area_name = $2 WHERE area_name = $1', [
+        current.rows[0].name,
+        name,
+      ]);
+      await recordAudit(client, actorId, 'department.updated', 'department', id);
+      return result.rows[0];
+    });
+  },
+
+  async deleteDepartment(id, actorId) {
+    return withTransaction(async (client) => {
+      const related = await client.query(
+        `SELECT
+           (SELECT count(*) FROM position_profiles WHERE department_id = $1) +
+           (SELECT count(*) FROM workers WHERE department_id = $1) +
+           (SELECT count(*) FROM coverage_requests WHERE department_id = $1) AS count`,
+        [id],
+      );
+      if (Number(related.rows[0].count) > 0) {
+        throw new AppError(409, 'RELATED_RECORDS', 'No se puede eliminar el área porque tiene perfiles, trabajadores o solicitudes asociados.');
+      }
+      const result = await client.query('DELETE FROM departments WHERE id = $1 RETURNING id', [id]);
+      if (!result.rowCount) return false;
+      await recordAudit(client, actorId, 'department.deleted', 'department', id);
+      return true;
+    });
+  },
+
   async getReportData(type) {
     const queries = {
       requests: `SELECT r.code, d.name AS department, p.title AS position, r.status::text AS status,
-                        r.required_by, u.display_name AS requested_by, r.created_at
+                        r.priority::text AS priority, r.required_by, u.display_name AS requested_by, r.created_at
                  FROM coverage_requests r
                  JOIN departments d ON d.id = r.department_id
                  JOIN position_profiles p ON p.id = r.position_id

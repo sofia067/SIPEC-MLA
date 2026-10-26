@@ -70,6 +70,9 @@ web_modules/
 .env.*
 !.env.example
 
+# Local development database files and credentials
+backend/.local-data/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
