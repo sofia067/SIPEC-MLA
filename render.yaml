@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: sipec-mla
+    runtime: node
+    plan: free
+    buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend
+    startCommand: npm run db:migrate --prefix backend && npm run db:seed --prefix backend && npm start --prefix backend
+    healthCheckPath: /api/health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sipec-mla-db
+          property: connectionString
+      - key: UPLOADS_DIR
+        value: /tmp/sipec-mla-uploads
+      - key: OCR_LANGUAGES
+        value: spa+eng
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_DISPLAY_NAME
+        value: Administrador SIPEC
+      - key: ADMIN_PASSWORD
+        sync: false
+
+databases:
+  - name: sipec-mla-db
+    databaseName: sipec_mla
+    user: sipec_mla_user
+    plan: free
+    postgresMajorVersion: "16"

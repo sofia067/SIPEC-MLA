@@ -1,5 +1,8 @@
 import cookieParser from 'cookie-parser';
 import express from 'express';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import { env } from './config/env.js';
 import { pool } from './db/pool.js';
@@ -12,6 +15,9 @@ import { createRequestRouter } from './routes/request-routes.js';
 export const app = express();
 
 app.disable('x-powered-by');
+if (env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 app.use(helmet());
 app.use(express.json({ limit: '32kb' }));
 app.use(cookieParser());
@@ -30,4 +36,9 @@ app.use('/api/auth', createAuthRouter({ secureCookies: env.SESSION_COOKIE_SECURE
 app.use('/api', createRequestRouter());
 app.use('/api', createModuleRouter());
 app.use('/api', notFoundHandler);
+const frontendDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
+if (existsSync(frontendDirectory)) {
+  app.use(express.static(frontendDirectory));
+  app.get(/.*/, (req, res) => res.sendFile(resolve(frontendDirectory, 'index.html')));
+}
 app.use(errorHandler);

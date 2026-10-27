@@ -75,7 +75,7 @@ export const requestRepository = {
 
   async listPublicOpenings() {
     const result = await pool.query(
-      `SELECT r.id, r.code, d.name AS department, p.title AS position_title,
+      `SELECT r.id, r.code, d.name AS department, p.title AS position_title, p.description,
               r.required_by
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
@@ -84,6 +84,55 @@ export const requestRepository = {
        ORDER BY r.created_at DESC`,
     );
     return result.rows;
+  },
+
+  async createPublicApplication({
+    requestId,
+    fullName,
+    documentNumber,
+    email,
+    phone,
+    resumeName,
+    resumeContent,
+  }) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const opening = await client.query(
+        `SELECT code FROM coverage_requests
+         WHERE id = $1 AND status = 'approved'
+         FOR SHARE`,
+        [requestId],
+      );
+      if (!opening.rowCount) {
+        throw new AppError(404, 'OPENING_NOT_AVAILABLE', 'La convocatoria ya no está disponible.');
+      }
+
+      const sequence = await client.query("SELECT nextval('public_application_code_seq') AS value");
+      const applicationCode = `POST-${String(sequence.rows[0].value).padStart(5, '0')}`;
+      const application = await client.query(
+        `INSERT INTO public_applications
+           (application_code, request_id, full_name, document_number, email, phone,
+            resume_name, resume_content)
+         VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8)
+           RETURNING application_code AS "applicationCode"`,
+        [applicationCode, requestId, fullName, documentNumber, email, phone, resumeName, resumeContent],
+      );
+      await client.query(
+        `INSERT INTO audit_events (event_type, resource_type, resource_id, metadata)
+         SELECT 'application.submitted', 'application', a.id, $2
+         FROM public_applications a
+         WHERE a.application_code = $1`,
+        [applicationCode, JSON.stringify({ applicationCode, requestCode: opening.rows[0].code })],
+      );
+      await client.query('COMMIT');
+      return application.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 
   async updateStatus(id, status, userId) {
