@@ -1,1 +1,62 @@
 @import "tailwindcss";
+
+@media (max-width: 767px) {
+  .app-shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .app-shell > aside {
+    width: 100%;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  .app-shell > aside > div:first-child > nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .app-shell > aside nav > :not(:first-child) {
+    margin-top: 0;
+  }
+
+  .app-shell > aside nav > * {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .app-shell > div {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app-shell > div > header {
+    padding-inline: 1rem;
+  }
+
+  .app-shell main {
+    padding: 1rem;
+  }
+
+  .app-shell main .grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  }
+
+  .app-shell main .grid > * {
+    grid-column: auto;
+  }
+
+  .app-shell main div:has(> table) {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .app-shell main div:has(> table) > table {
+    min-width: 640px;
+  }
+}
