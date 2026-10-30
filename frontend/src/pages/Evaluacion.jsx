@@ -97,8 +97,10 @@ export default function Evaluaciones() {
   const [marcadas, setMarcadas] = useState([]);
   const [resultado, setResultado] = useState(null);
   const [evaluacionSeleccionada, setEvaluacionSeleccionada] = useState(null);
+  const [puntajeManual, setPuntajeManual] = useState('');
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [calificando, setCalificando] = useState(false);
   const [error, setError] = useState('');
   const [puntajeMinimo, setPuntajeMinimo] = useState(70);
   const preguntas = evaluacionesPorPuesto[puesto] || [];
@@ -108,7 +110,7 @@ export default function Evaluaciones() {
     try {
       const [evaluationsResult, requestsResult, systemResult] = await Promise.all([
         apiRequest('/evaluations'),
-        apiRequest('/requests'),
+        apiRequest('/candidate-requests'),
         apiRequest('/system-info'),
       ]);
       setEvaluaciones(evaluationsResult.evaluations);
@@ -202,6 +204,36 @@ export default function Evaluaciones() {
       detalle = null;
     }
     setEvaluacionSeleccionada({ ...evaluacion, detalle });
+    setPuntajeManual(evaluacion.score == null ? '' : String(evaluacion.score));
+  };
+
+  const calificarEvaluacion = async () => {
+    if (puntajeManual.trim() === '') {
+      setError('Ingresa un puntaje entre 0 y 100.');
+      return;
+    }
+    const score = Number(puntajeManual);
+    if (!Number.isFinite(score) || score < 0 || score > 100) {
+      setError('Ingresa un puntaje entre 0 y 100.');
+      return;
+    }
+
+    setCalificando(true);
+    setError('');
+    try {
+      const { evaluation } = await apiRequest(`/evaluations/${evaluacionSeleccionada.id}/score`, {
+        method: 'PATCH',
+        body: JSON.stringify({ score }),
+      });
+      setEvaluaciones((current) => current.map((item) => (
+        item.id === evaluation.id ? { ...item, ...evaluation, score } : item
+      )));
+      setEvaluacionSeleccionada((current) => ({ ...current, score }));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setCalificando(false);
+    }
   };
 
   const preguntaActual = preguntas[indicePregunta];
@@ -378,7 +410,9 @@ export default function Evaluaciones() {
                           </ol>
                         </section>
                         <section>
-                          <h4 className="font-semibold text-gray-900">Desarrollo — pendiente de calificación</h4>
+                          <h4 className="font-semibold text-gray-900">
+                            Desarrollo — {evaluacionSeleccionada.score == null ? 'pendiente de calificación' : `puntaje ${evaluacionSeleccionada.score}/100`}
+                          </h4>
                           <ol className="mt-3 list-decimal space-y-4 pl-5">
                             {evaluacionSeleccionada.detalle.respuestasDesarrollo.map((respuesta, indice) => (
                               <li key={`desarrollo-${indice}`}>
@@ -395,6 +429,34 @@ export default function Evaluaciones() {
                       <p className="mt-5 whitespace-pre-wrap text-sm text-gray-700">
                         {evaluacionSeleccionada.notes || 'Esta evaluación no tiene respuestas registradas.'}
                       </p>
+                    )}
+                    {evaluacionSeleccionada.score == null && (
+                      <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-end">
+                        <div>
+                          <label htmlFor="puntaje-evaluacion" className="mb-1 block text-xs font-semibold text-gray-700">
+                            Puntaje final (0–100)
+                          </label>
+                          <input
+                            id="puntaje-evaluacion"
+                            type="number"
+                            required
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={puntajeManual}
+                            onChange={(event) => setPuntajeManual(event.target.value)}
+                            className="w-full rounded-lg border px-3 py-2 text-sm sm:w-40"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={calificarEvaluacion}
+                          disabled={calificando}
+                          className="rounded-lg bg-blue-950 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-900 disabled:opacity-50"
+                        >
+                          {calificando ? 'Guardando…' : 'Guardar calificación'}
+                        </button>
+                      </div>
                     )}
                   </section>
                 </div>

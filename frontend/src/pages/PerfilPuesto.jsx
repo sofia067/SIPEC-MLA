@@ -56,10 +56,20 @@ export default function PerfilPuesto() {
       setAreas(lookups.departments);
       setPerfiles(profiles.map((profile) => ({
         ...profile,
-        puesto: profile.title,
-        area: profile.department,
-        nivel: profile.level,
-        requisitos: profile.principal_requirements,
+        id: profile.id,
+        puesto: profile.title || '',
+        area: profile.department || '',
+        nivel: profile.level || 'Profesional',
+        codigo: profile.profile_code || '',
+        remuneracion: profile.reference_salary || 0,
+        mision: profile.description || '',
+        formacion: profile.academic_formation || '',
+        experienciaGeneral: profile.general_experience || '',
+        experienciaEspecifica: profile.specific_experience || '',
+        conocimientos: Array.isArray(profile.technical_knowledge) ? profile.technical_knowledge : [],
+        competencias: Array.isArray(profile.competencies) ? profile.competencies : [],
+        funciones: Array.isArray(profile.responsibilities) ? profile.responsibilities : [],
+        requisitos: profile.principal_requirements || '',
         estado: profile.status === 'active' ? 'Activo' : 'Inactivo',
       })));
       setError('');
@@ -150,8 +160,6 @@ export default function PerfilPuesto() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="text-gray-500 text-base">🔔</button>
-            
             <UserDropdown />
           </div>
         </header>
@@ -166,8 +174,8 @@ export default function PerfilPuesto() {
 
             {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
-            {/* Botón que abre el Modal */}
-            <button 
+            {/* Botón para abrir el Modal */}
+            <button
               onClick={() => setMostrarModal(true)}
               className="bg-blue-950 hover:bg-blue-900 text-white font-semibold text-xs px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
             >
@@ -254,7 +262,7 @@ export default function PerfilPuesto() {
         </main>
       </div>
 
-      {/* MODAL FORMULARIO DE NUEVO PERFIL */}
+      {/* Modal de formulario para el nuevo perfil */}
       {mostrarModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl border w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">

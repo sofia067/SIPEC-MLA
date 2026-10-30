@@ -57,8 +57,15 @@ export const modulesRepository = {
          WHERE p.status = 'active'
          ORDER BY d.name, p.title`,
       ),
-      pool.query('SELECT id, full_name FROM workers WHERE status = $1 ORDER BY full_name', ['active']),
-      pool.query('SELECT id, code FROM coverage_requests ORDER BY created_at DESC LIMIT 500'),
+      pool.query(
+        `SELECT w.id, w.full_name FROM workers w
+         WHERE w.status = 'active'
+         ORDER BY w.full_name`,
+      ),
+      pool.query(
+        `SELECT r.id, r.code FROM coverage_requests r
+         ORDER BY r.created_at DESC LIMIT 500`,
+      ),
     ]);
     return {
       departments: departments.rows,
@@ -69,7 +76,9 @@ export const modulesRepository = {
   },
 
   async listWorkers() {
-    const result = await pool.query(`${workerSelect} ORDER BY w.full_name`);
+    const result = await pool.query(
+      `${workerSelect} ORDER BY w.full_name`,
+    );
     return result.rows;
   },
 
@@ -229,15 +238,18 @@ export const modulesRepository = {
            LEFT JOIN coverage_requests r ON r.id = d.request_id
            LEFT JOIN workers w ON w.id = d.worker_id
            ORDER BY d.created_at DESC`
-        : `SELECT e.id, e.evaluation_name, e.candidate_name, e.notes, e.score,
+        : `SELECT e.id, e.evaluation_name, coalesce(e.candidate_name, w.full_name) AS candidate_name,
+                  e.notes, e.score,
                   e.status::text AS status, e.created_at, e.request_id, r.code AS request_code,
                   p.title AS position_title,
-                  e.worker_id, w.full_name AS worker_name
+                  e.worker_id,
+                  w.full_name AS worker_name
            FROM technical_evaluations e
            LEFT JOIN coverage_requests r ON r.id = e.request_id
            LEFT JOIN position_profiles p ON p.id = r.position_id
            LEFT JOIN workers w ON w.id = e.worker_id
            ORDER BY e.created_at DESC`,
+      [],
     );
     return result.rows;
   },
@@ -291,6 +303,21 @@ export const modulesRepository = {
       const result = await client.query(statement, values);
       if (!result.rowCount) return null;
       await recordAudit(client, actorId, `${type}.updated`, type, id);
+      return result.rows[0];
+    });
+  },
+
+  async scoreEvaluation(id, score, actorId) {
+    return withTransaction(async (client) => {
+      const result = await client.query(
+        `UPDATE technical_evaluations
+         SET score = $2, status = 'completed', evaluated_by = $3, evaluated_at = now()
+         WHERE id = $1
+         RETURNING id, score, status::text AS status, evaluated_at`,
+        [id, score, actorId],
+      );
+      if (!result.rowCount) return null;
+      await recordAudit(client, actorId, 'evaluations.scored', 'evaluations', id);
       return result.rows[0];
     });
   },
@@ -593,7 +620,7 @@ export const modulesRepository = {
     });
   },
 
-  async getReportData(type) {
+  async getReportData(type, areaName = null) {
     const queries = {
       requests: `SELECT r.code, d.name AS department, p.title AS position, r.status::text AS status,
                         r.priority::text AS priority, r.required_by, u.display_name AS requested_by, r.created_at
@@ -601,20 +628,25 @@ export const modulesRepository = {
                  JOIN departments d ON d.id = r.department_id
                  JOIN position_profiles p ON p.id = r.position_id
                  JOIN users u ON u.id = r.requested_by
+                 WHERE ($1::text IS NULL OR d.name = $1)
                  ORDER BY r.created_at DESC`,
       workers: `SELECT w.employee_number, w.document_number, w.full_name, w.email, w.phone,
                        d.name AS department, p.title AS position, w.status::text AS status
                 FROM workers w JOIN departments d ON d.id = w.department_id
                 LEFT JOIN position_profiles p ON p.id = w.position_id
+                WHERE ($1::text IS NULL OR d.name = $1)
                 ORDER BY w.full_name`,
       evaluations: `SELECT e.evaluation_name, e.candidate_name, e.status::text AS status, e.score,
                             r.code AS request_code, w.full_name AS worker, e.created_at
                      FROM technical_evaluations e
                      LEFT JOIN coverage_requests r ON r.id = e.request_id
+                     LEFT JOIN departments rd ON rd.id = r.department_id
                      LEFT JOIN workers w ON w.id = e.worker_id
+                     LEFT JOIN departments wd ON wd.id = w.department_id
+                     WHERE ($1::text IS NULL OR rd.name = $1 OR wd.name = $1)
                      ORDER BY e.created_at DESC`,
     };
-    const result = await pool.query(queries[type]);
+    const result = await pool.query(queries[type], [areaName]);
     return result.rows;
   },
 };

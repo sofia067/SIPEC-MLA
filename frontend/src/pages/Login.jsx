@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../components/AuthContext';
 import { apiRequest } from '../lib/api';
 
 function Login() {
@@ -7,6 +8,7 @@ function Login() {
   const [iniciandoSesion, setIniciandoSesion] = useState(false);
   const [mensajeError, setMensajeError] = useState('');
   const navigate = useNavigate();
+  const { setUser } = useAuth();
 
   const manejarCambio = (e) => {
     setCredenciales({ ...credenciales, [e.target.name]: e.target.value });
@@ -24,7 +26,7 @@ function Login() {
     setMensajeError('');
 
     try {
-      await apiRequest('/auth/login', {
+      const { user } = await apiRequest('/auth/login', {
         method: 'POST',
         body: JSON.stringify({
           username: credenciales.usuario,
@@ -33,6 +35,7 @@ function Login() {
         }),
       });
 
+      setUser(user);
       navigate('/dashboard');
     } catch (error) {
       setMensajeError(

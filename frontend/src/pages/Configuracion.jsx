@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
 import { apiRequest } from '../lib/api';
+import { roleNames } from '../lib/rolePermissions';
 
 const emptyUserForm = {
   username: '',
@@ -19,12 +20,6 @@ const defaultSettings = {
   maxUploadMb: 10,
   passingScore: 70,
   declarationDeadlineDays: 5,
-};
-
-const roleNames = {
-  admin: 'Administrador',
-  hr_specialist: 'Especialista de RR. HH.',
-  area_manager: 'Jefe de Área',
 };
 
 const tabs = [

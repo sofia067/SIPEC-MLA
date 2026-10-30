@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend
-    startCommand: npm run db:migrate --prefix backend && npm run db:seed --prefix backend && npm start --prefix backend
+    startCommand: npm run db:migrate --prefix backend && npm run db:seed --prefix backend && npm run db:seed:roles --prefix backend && npm start --prefix backend
     healthCheckPath: /api/health/ready
     envVars:
       - key: NODE_ENV
@@ -24,6 +24,10 @@ services:
       - key: ADMIN_DISPLAY_NAME
         value: Administrador SIPEC
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: AREA_MANAGER_PASSWORD
+        sync: false
+      - key: HR_SPECIALIST_PASSWORD
         sync: false
 
 databases:

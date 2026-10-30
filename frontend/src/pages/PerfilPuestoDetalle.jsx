@@ -25,25 +25,88 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
 
-  const convertirPerfil = (profile) => ({
-    id: profile.id,
-    puesto: profile.title,
-    area: profile.department,
-    nivel: profile.level,
-    codigo: profile.profile_code || profile.id,
-    remuneracion: profile.reference_salary === null ? '' : String(profile.reference_salary ?? ''),
-    estado: profile.status === 'active' ? 'Activo' : 'Inactivo',
-    mision: profile.description || '',
-    reportaA: '',
-    supervisaA: '',
-    formacion: profile.principal_requirements || '',
-    formacionAcademica: profile.academic_formation || '',
-    experienciaGeneral: profile.general_experience || '',
-    experienciaEspecifica: profile.specific_experience || '',
-    conocimientos: profile.technical_knowledge || [],
-    funciones: profile.responsibilities || [],
-    competencies: profile.competencies || [],
-  });
+const convertirPerfil = (profile) => ({
+  id: profile.id,
+  puesto: profile.title || '',
+  area: profile.department || '',
+  nivel: profile.level || '',
+  codigo: profile.profile_code || profile.id || '',
+  remuneracion:
+    profile.reference_salary === null
+      ? ''
+      : String(profile.reference_salary ?? ''),
+  estado: profile.status === 'active' ? 'Activo' : 'Inactivo',
+  mision: profile.description || '',
+  reportaA: '',
+  supervisaA: '',
+  formacion: profile.principal_requirements || '',
+  formacionAcademica: profile.academic_formation || '',
+  experienciaGeneral: profile.general_experience || '',
+  experienciaEspecifica: profile.specific_experience || '',
+
+conocimientos: (() => {
+  const valor = profile.technical_knowledge;
+
+  if (Array.isArray(valor)) {
+    return valor
+      .map((item) => {
+        if (typeof item === 'string') {
+          const texto = item.trim();
+          try {
+            const objeto = JSON.parse(texto);
+            if (objeto && typeof objeto === 'object') {
+              return objeto.name || objeto.description || '';
+            }
+          } catch {
+          
+          }
+          return texto;
+        }
+        if (item && typeof item === 'object') {
+          return item.name || item.description || '';
+        }
+        return '';
+      })
+      .filter(Boolean);
+  }
+  if (typeof valor === 'string') {
+    try {
+      const objeto = JSON.parse(valor);
+
+      if (Array.isArray(objeto)) {
+        return objeto
+          .map((item) =>
+            typeof item === 'string'
+              ? item
+              : item?.name || item?.description || ''
+          )
+          .filter(Boolean);
+      }
+
+      if (objeto && typeof objeto === 'object') {
+        return [objeto.name || objeto.description || ''].filter(Boolean);
+      }
+    } catch {
+  
+    }
+    return valor
+      .split(/\r?\n|,\s*/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+})(),
+
+  funciones: Array.isArray(profile.responsibilities)
+    ? profile.responsibilities
+    : typeof profile.responsibilities === 'string'
+      ? profile.responsibilities.split('\n').filter(Boolean)
+      : [],
+
+  competencies: Array.isArray(profile.competencies)
+    ? profile.competencies
+    : [],
+});
 
   const editarLista = (key, value) => {
     setDatosPerfil({
@@ -182,8 +245,7 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
           {!isModal && (
             <button
               onClick={() => navigate('/perfil-puesto')}
-              className="text-xs font-semibold text-gray-500 hover:text-blue-900 flex items-center gap-1 transition-colors"
-            >
+              className="text-xs font-semibold text-gray-500 hover:text-blue-900 flex items-center gap-1 transition-colors">
               ← Volver a la lista
             </button>
           )}
@@ -208,16 +270,14 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
                   modoEdicion 
                     ? 'bg-amber-500 hover:bg-amber-600 text-white' 
                     : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
+                }`} >
                 {modoEdicion ? '🔓 Modo Edición Activo' : '✏️ Editar Perfil'}
               </button>
               {modoEdicion && (
                 <button 
                   onClick={guardarPerfil}
                   disabled={guardando}
-                  className="text-xs font-semibold px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-                >
+                  className="text-xs font-semibold px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors" >
                   {guardando ? 'Guardando…' : '💾 Guardar'}
                 </button>
               )}
@@ -235,8 +295,7 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
                 activeTab === 'general' 
                   ? 'border-b-2 border-blue-900 text-blue-950 font-semibold' 
                   : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
+              }`} >
               Información general
             </button>
             <button 
@@ -245,8 +304,7 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
                 activeTab === 'requisitos' 
                   ? 'border-b-2 border-blue-900 text-blue-950 font-semibold' 
                   : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
+              }`}>
               Requisitos y competencias
             </button>
             <button 
@@ -255,8 +313,7 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
                 activeTab === 'responsabilidades' 
                   ? 'border-b-2 border-blue-900 text-blue-950 font-semibold' 
                   : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
+              }`} >
               Responsabilidades
             </button>
           </div>
@@ -389,39 +446,107 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
                 </div>
               </div>
 
-              {/* Columna de Competencias */}
-              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-gray-800 text-sm border-b pb-2">Competencias Requeridas</h3>
+             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+  <h3 className="font-bold text-gray-800 text-sm border-b pb-2">
+    Competencias Requeridas
+  </h3>
 
-                <div className="space-y-3 text-xs">
-                  {datosPerfil.competencies.map((competency) => (
-                    <div key={competency.id || competency.name} className="py-2 border-b border-gray-100">
-                      <p className="text-gray-700 font-medium">🎯 {competency.name}</p>
-                      {competency.description && <p className="mt-1 text-gray-500">{competency.description}</p>}
-                    </div>
-                  ))}
-                  {datosPerfil.competencies.length === 0 && (
-                    <p className="text-gray-500">No hay competencias registradas para este perfil.</p>
-                  )}
-                </div>
+  <div className="space-y-3 text-xs">
+    {datosPerfil.competencies.map((competency, index) => (
+      <div
+        key={competency.id || index}
+        className="py-2 border-b border-gray-100" >
+        {modoEdicion ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={competency.name || ''}
+              onChange={(event) => {
+                const nuevasCompetencias = [...datosPerfil.competencies];
+                nuevasCompetencias[index] = {
+                  ...competency,
+                  name: event.target.value,
+                };
 
-                {modoEdicion && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const name = prompt('Nombre de la competencia:');
-                      if (name?.trim()) {
-                        setDatosPerfil({
-                          ...datosPerfil,
-                          competencies: [...datosPerfil.competencies, { name: name.trim(), description: '' }],
-                        });
-                      }
-                    }}
-                    className="text-xs font-semibold text-blue-900 hover:underline"
-                  >
-                    Agregar competencia
-                  </button>
-                )}
+                setDatosPerfil({
+                  ...datosPerfil,
+                  competencies: nuevasCompetencias,
+                });
+              }}
+              placeholder="Nombre de la competencia"
+              className="w-full border border-amber-400 p-2 rounded text-xs" />
+
+            <textarea
+              rows={2}
+              value={competency.description || ''}
+              onChange={(event) => {
+                const nuevasCompetencias = [...datosPerfil.competencies];
+                nuevasCompetencias[index] = {
+                  ...competency,
+                  description: event.target.value,
+                };
+
+                setDatosPerfil({
+                  ...datosPerfil,
+                  competencies: nuevasCompetencias,
+                });
+              }}
+              placeholder="Descripción de la competencia"
+              className="w-full border border-amber-400 p-2 rounded text-xs" />
+
+            <button
+              type="button"
+              onClick={() => {
+                setDatosPerfil({
+                  ...datosPerfil,
+                  competencies: datosPerfil.competencies.filter(
+                    (_, i) => i !== index
+                  ),
+                });
+              }}
+              className="text-red-600 hover:underline font-semibold" >
+              Eliminar competencia
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-gray-700 font-medium">
+              🎯 {competency.name}
+            </p>
+
+            {competency.description && (
+              <p className="mt-1 text-gray-500">
+                {competency.description}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    ))}
+
+    {datosPerfil.competencies.length === 0 && (
+      <p className="text-gray-500">
+        No hay competencias registradas para este perfil.
+      </p>
+    )}
+  </div>
+
+  {modoEdicion && (
+    <button
+      type="button"
+      onClick={() => {
+        setDatosPerfil({
+          ...datosPerfil,
+          competencies: [
+            ...datosPerfil.competencies,
+            { name: '', description: '' },
+          ],
+        });
+      }}
+      className="text-xs font-semibold text-blue-900 hover:underline">
+      + Agregar competencia
+    </button>
+  )}
                 <div className="pt-2 text-[11px] text-gray-500 italic">
                   Las competencias y descripciones se obtienen del registro del perfil.
                 </div>
@@ -457,22 +582,19 @@ export default function PerfilPuestoDetalle({ profile: profileProp, onClose } = 
         className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6"
         onClick={(event) => {
           if (event.target === event.currentTarget) onClose();
-        }}
-      >
+        }} >
         <section
           role="dialog"
           aria-modal="true"
           aria-label={`Ficha del puesto ${datosPerfil.puesto}`}
-          className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-gray-100 text-gray-800 shadow-2xl"
-        >
+          className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-gray-100 text-gray-800 shadow-2xl" >
           <header className="flex items-center justify-between border-b bg-white px-5 py-3 sm:px-7">
             <h1 className="text-lg font-bold text-blue-950">Ficha completa del puesto</h1>
             <button
               type="button"
               aria-label="Cerrar ficha"
               onClick={onClose}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-lg leading-none text-gray-600 hover:bg-gray-100"
-            >
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-lg leading-none text-gray-600 hover:bg-gray-100" >
               ×
             </button>
           </header>

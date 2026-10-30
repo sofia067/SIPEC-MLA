@@ -20,7 +20,7 @@ export const requestService = {
   async getDashboard() {
     const [summary, requests] = await Promise.all([
       requestRepository.getDashboardSummary(),
-      requestRepository.listRecent(10),
+      requestRepository.listRecent(),
     ]);
     return { summary, requests };
   },

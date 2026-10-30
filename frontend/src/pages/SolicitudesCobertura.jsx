@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
 import { apiRequest } from '../lib/api';
 
@@ -13,7 +14,7 @@ export default function SolicitudesCobertura() {
     department: '',
     positionTitle: '',
     reason: '',
-    priority: 'medium',
+    priority:'average',
     requiredBy: '',
   });
   const [cargando, setCargando] = useState(true);
@@ -94,72 +95,20 @@ export default function SolicitudesCobertura() {
     high: 'Alta',
   };
 
-  const cerrarSesion = async () => {
-    try {
-      await apiRequest('/auth/logout', { method: 'POST' });
-      navigate('/');
-    } catch (requestError) {
-      setError(requestError.message);
-    }
-  };
-
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
-      
-      {/* Sidebar Lateral */}
-      <aside className="w-64 bg-blue-950 text-white flex flex-col justify-between shrink-0">
-        <div>
-          <div className="p-4 flex items-center gap-3 border-b border-blue-900">
-            <img src="/AquijesLogo.jpg" alt="Logo Los Aquijes" className="w-12 h-12 bg-white/20 p-1 rounded-lg object-contain shrink-0" />
-            <div>
-              <h1 className="font-bold text-lg tracking-wider leading-tight text-white">SIPEC-MLA</h1>
-              <p className="text-[10px] text-blue-300 font-medium">Los Aquijes</p>
-            </div>
-          </div>
-
-          <nav className="p-3 space-y-1.5 text-sm">
-            <button onClick={() => navigate('/dashboard')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">🏚️</span> Inicio
-            </button>
-            <button onClick={() => navigate('/trabajadores')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">👥</span> Trabajadores
-            </button>
-            <button onClick={() => navigate('/perfil-puesto')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">📄</span> Perfiles de puesto
-            </button>
-            <button className="w-full text-left py-2.5 px-3 rounded bg-blue-900 font-bold flex items-center gap-3 text-blue-100">
-              <span className="text-base">📑</span> Solicitudes de cobertura
-            </button>
-            <button onClick={() => navigate('/candidatos-compatibles')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">🎯</span> Candidatos compatibles
-            </button>
-            <button onClick={() => navigate('/validacion-ocr')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">🛡️</span> Validación documental
-            </button>
-            <button onClick={() => navigate('/evaluaciones')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">📝</span> Evaluaciones
-            </button>
-          </nav>
-        </div>
-
-        <div className="p-3 border-t border-blue-900">
-          <button onClick={cerrarSesion} className="w-full text-left py-2 px-3 rounded hover:bg-red-900/50 text-sm font-medium text-red-300 flex items-center gap-2">
-            ❌ Cerrar sesión
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       {/* Área Principal */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         <header className="bg-white border-b px-8 py-3 flex justify-end items-center gap-4">
-          <button className="text-gray-500 text-base">🔔</button>
           <UserDropdown />
         </header>
 
         <main className="p-8 space-y-6">
           
           {!mostrarFormulario ? (
-            /* Vista 1: Tabla de Historial General */
+            /*  Tabla de Historial General */
             <>
               <div className="flex justify-between items-center">
                 <div>
@@ -248,7 +197,7 @@ export default function SolicitudesCobertura() {
               </div>
             </>
           ) : (
-            /* Vista 2: Formulario de Nueva Solicitud */
+            /*  Formulario de Nueva Solicitud */
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
                 <h2 className="text-xl font-bold text-gray-900">Nueva Solicitud de Cobertura</h2>
@@ -397,7 +346,7 @@ export default function SolicitudesCobertura() {
                   type="button"
                   onClick={() => publicarSolicitud(solicitudSeleccionada)}
                   disabled={publicandoId === solicitudSeleccionada.id}
-                  className="rounded-lg bg-indigo-700 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-800 disabled:cursor-wait disabled:opacity-60"
+                  className="rounded-lg bg-blue-900 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                 >
                   {publicandoId === solicitudSeleccionada.id ? 'Publicando…' : 'Publicar solicitud'}
                 </button>
@@ -406,7 +355,7 @@ export default function SolicitudesCobertura() {
                 <button
                   type="button"
                   onClick={() => navigate('/postular')}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
+                  className="rounded-lg bg-blue-900 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                 >
                   Ver en portal
                 </button>

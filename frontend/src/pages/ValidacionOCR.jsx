@@ -139,7 +139,7 @@ export default function ValidacionOCR() {
 
           {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {/* Panel de Carga de Archivo */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 text-xs">
               <h3 className="font-bold text-sm text-gray-800">Cargar Documento Sustentatorio</h3>
@@ -227,7 +227,7 @@ export default function ValidacionOCR() {
             </div>
 
             {/* Panel de Resultados del Análisis OCR */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 text-xs">
+            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 text-xs lg:col-span-2">
               <h3 className="font-bold text-sm text-gray-800 border-b pb-2">Resultado de la Extracción Óptica</h3>
 
               {!procesando && !documentoSeleccionado && (

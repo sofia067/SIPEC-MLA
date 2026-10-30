@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { uploadDocument } from '../middleware/upload.js';
 import { modulesRepository } from '../repositories/modules-repository.js';
+import { notificationRepository } from '../repositories/notification-repository.js';
 import { requestRepository } from '../repositories/request-repository.js';
 import { hashPassword } from '../security/password.js';
 import { documentService } from '../services/document-service.js';
@@ -71,6 +72,9 @@ const evaluationSchema = z.object({
 }).refine((data) => data.requestId || data.workerId, {
   message: 'Vincula la evaluación a una solicitud o a un trabajador.',
 });
+const evaluationScoreSchema = z.object({
+  score: z.number().min(0).max(100),
+});
 const assignmentSchema = z.object({
   requestId: idSchema,
   workerId: z.union([z.literal(''), idSchema]).optional().default(''),
@@ -133,18 +137,31 @@ export function createModuleRouter() {
   const router = Router();
   router.use(authenticate);
 
+  router.get('/notifications', async (req, res) => {
+    res.json(await notificationRepository.listForUser(req.user.id));
+  });
+  router.patch('/notifications/:id/read', validateIdParam, async (req, res) => {
+    const updated = await notificationRepository.markRead(req.params.id, req.user.id);
+    if (!updated) throw new AppError(404, 'NOTIFICATION_NOT_FOUND', 'No se encontró la notificación.');
+    res.status(204).end();
+  });
+  router.post('/notifications/read-all', async (req, res) => {
+    const updated = await notificationRepository.markAllRead(req.user.id);
+    res.json({ updated });
+  });
+
   router.get('/lookups', async (req, res) => res.json(await modulesRepository.getLookups()));
 
   router.get('/workers', async (req, res) => res.json({ workers: await modulesRepository.listWorkers() }));
-  router.post('/workers', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.post('/workers', async (req, res) => {
     const input = workerSchema.omit({ status: true }).parse(req.body);
     res.status(201).json({ worker: await modulesRepository.createWorker(input, req.user.id) });
   });
-  router.patch('/workers/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.patch('/workers/:id', async (req, res) => {
     const input = workerSchema.parse(req.body);
     res.json({ worker: await findOr404(() => modulesRepository.updateWorker(requireId(req.params.id), input, req.user.id)) });
   });
-  router.delete('/workers/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.delete('/workers/:id', async (req, res) => {
     await findOr404(() => modulesRepository.deleteWorker(requireId(req.params.id), req.user.id));
     res.status(204).end();
   });
@@ -157,22 +174,25 @@ export function createModuleRouter() {
     );
     res.json({ profile });
   });
-  router.post('/profiles', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
+  router.post('/profiles', async (req, res) => {
     const input = profileSchema.parse(req.body);
     res.status(201).json({ id: await modulesRepository.createProfile(input, req.user.id) });
   });
-  router.patch('/profiles/:id', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
+  router.patch('/profiles/:id', async (req, res) => {
     const input = profileSchema.parse(req.body);
     await findOr404(() => modulesRepository.updateProfile(requireId(req.params.id), input, req.user.id));
     res.json({ id: req.params.id });
   });
-  router.delete('/profiles/:id', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
+  router.delete('/profiles/:id', async (req, res) => {
     await findOr404(() => modulesRepository.deleteProfile(requireId(req.params.id), req.user.id));
     res.status(204).end();
   });
 
   router.get('/requests', async (req, res) => res.json({ requests: await requestRepository.listAll() }));
-  router.patch('/requests/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.get('/candidate-requests', async (req, res) => (
+    res.json({ requests: await requestRepository.listCandidateRequests() })
+  ));
+  router.patch('/requests/:id', async (req, res) => {
     const input = requestDetailsSchema.parse(req.body);
     if (input.requiredBy && input.requiredBy < new Date().toISOString().slice(0, 10)) {
       throw new AppError(400, 'INVALID_REQUIRED_DATE', 'La fecha requerida no puede estar en el pasado.');
@@ -183,7 +203,7 @@ export function createModuleRouter() {
     );
     res.json({ request: result });
   });
-  router.patch('/requests/:id/status', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.patch('/requests/:id/status', async (req, res) => {
     const { status } = requestStatusSchema.parse(req.body);
     if (status === 'completed') {
       throw new AppError(400, 'INVALID_STATUS_TRANSITION', 'Una solicitud se completa mediante una asignación.');
@@ -194,7 +214,7 @@ export function createModuleRouter() {
     );
     res.json({ request: result });
   });
-  router.delete('/requests/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.delete('/requests/:id', async (req, res) => {
     await findOr404(
       () => requestRepository.deletePending(requireId(req.params.id), req.user.id),
       'Solo se pueden eliminar solicitudes pendientes sin asignaciones.',
@@ -203,34 +223,43 @@ export function createModuleRouter() {
   });
 
   router.get('/documents', async (req, res) => res.json({ documents: await modulesRepository.listWorkItems('documents') }));
-  router.post('/documents', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.post('/documents', async (req, res) => {
     const input = documentSchema.parse(req.body);
     res.status(201).json({ document: await modulesRepository.createWorkItem('documents', input, req.user.id) });
   });
-  router.patch('/documents/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.patch('/documents/:id', async (req, res) => {
     const input = documentSchema.parse(req.body);
     res.json({ document: await findOr404(() => modulesRepository.updateWorkItem('documents', requireId(req.params.id), input, req.user.id)) });
   });
-  router.delete('/documents/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.delete('/documents/:id', async (req, res) => {
     await findOr404(() => modulesRepository.deleteWorkItem('documents', requireId(req.params.id), req.user.id));
     res.status(204).end();
   });
 
   router.get('/evaluations', async (req, res) => res.json({ evaluations: await modulesRepository.listWorkItems('evaluations') }));
-  router.post('/evaluations', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.post('/evaluations', async (req, res) => {
     const input = evaluationSchema.parse(req.body);
     res.status(201).json({ evaluation: await modulesRepository.createWorkItem('evaluations', input, req.user.id) });
   });
-  router.patch('/evaluations/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.patch('/evaluations/:id', async (req, res) => {
     const input = evaluationSchema.parse(req.body);
     res.json({ evaluation: await findOr404(() => modulesRepository.updateWorkItem('evaluations', requireId(req.params.id), input, req.user.id)) });
   });
-  router.delete('/evaluations/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.patch('/evaluations/:id/score', async (req, res) => {
+    const { score } = evaluationScoreSchema.parse(req.body);
+    const evaluation = await findOr404(() => modulesRepository.scoreEvaluation(
+      requireId(req.params.id),
+      score,
+      req.user.id,
+    ));
+    res.json({ evaluation });
+  });
+  router.delete('/evaluations/:id', async (req, res) => {
     await findOr404(() => modulesRepository.deleteWorkItem('evaluations', requireId(req.params.id), req.user.id));
     res.status(204).end();
   });
 
-  router.post('/documents/:id/file', authorize('admin', 'hr_specialist'), validateIdParam, uploadDocument, async (req, res) => {
+  router.post('/documents/:id/file', validateIdParam, uploadDocument, async (req, res) => {
     const document = await documentService.attachFile(req.params.id, req.file, req.user.id);
     res.status(202).json({ document });
   });
@@ -242,29 +271,29 @@ export function createModuleRouter() {
     if (!file.file_path) throw new AppError(404, 'NO_FILE', 'El documento no tiene archivo adjunto.');
     res.download(file.file_path, file.file_name ?? undefined);
   });
-  router.post('/documents/:id/ocr', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.post('/documents/:id/ocr', async (req, res) => {
     res.status(202).json({ document: await documentService.reprocessOcr(requireId(req.params.id)) });
   });
 
   router.get('/assignments', async (req, res) => res.json({ assignments: await modulesRepository.listAssignments() }));
-  router.post('/assignments', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.post('/assignments', async (req, res) => {
     const input = assignmentSchema.parse(req.body);
     res.status(201).json({ assignment: await modulesRepository.createAssignment(input, req.user.id) });
   });
-  router.patch('/assignments/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.patch('/assignments/:id', async (req, res) => {
     const input = assignmentSchema.parse(req.body);
     res.json({ assignment: await findOr404(() => modulesRepository.updateAssignment(requireId(req.params.id), input, req.user.id)) });
   });
-  router.delete('/assignments/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.delete('/assignments/:id', async (req, res) => {
     await findOr404(() => modulesRepository.deleteAssignment(requireId(req.params.id), req.user.id));
     res.status(204).end();
   });
 
-  router.get('/reports', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.get('/reports', async (req, res) => {
     const type = z.enum(['requests', 'workers', 'evaluations']).parse(req.query.type ?? 'requests');
     res.json({ type, rows: await modulesRepository.getReportData(type) });
   });
-  router.get('/reports/:type.csv', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.get('/reports/:type.csv', async (req, res) => {
     const type = z.enum(['requests', 'workers', 'evaluations']).parse(req.params.type);
     const rows = await modulesRepository.getReportData(type);
     const columns = rows.length ? Object.keys(rows[0]) : [];

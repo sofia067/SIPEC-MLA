@@ -58,7 +58,7 @@ export default function CandidatosCompatibles() {
 
   useEffect(() => {
     let active = true;
-    apiRequest('/requests')
+    apiRequest('/candidate-requests')
       .then(({ requests: availableRequests }) => {
         if (!active) return;
         const compatibles = availableRequests.filter((request) => !['rejected', 'completed'].includes(request.status));

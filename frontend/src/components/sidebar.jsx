@@ -1,28 +1,32 @@
  import React, { useState } from 'react';
  import { NavLink, useNavigate } from 'react-router-dom';
  import { apiRequest } from '../lib/api';
+ import { useAuth } from './AuthContext';
+ import { moduleRoles } from '../lib/rolePermissions';
 
  const enlaces = [
-   { ruta: '/dashboard', icono: '🏚️', texto: 'Inicio', exacto: true },
-   { ruta: '/trabajadores', icono: '👥', texto: 'Trabajadores' },
-   { ruta: '/perfil-puesto', icono: '📄', texto: 'Perfiles de puesto' },
-   { ruta: '/solicitudes-cobertura', icono: '📑', texto: 'Solicitudes de cobertura' },
-   { ruta: '/candidatos-compatibles', icono: '🎯', texto: 'Candidatos compatibles' },
-   { ruta: '/validacion-ocr', icono: '🛡️', texto: 'Validación documental' },
-   { ruta: '/evaluacion', icono: '📝', texto: 'Evaluación' },
-   { ruta: '/informes', icono: '📊', texto: 'Reportes' },
-   { ruta: '/auditoria', icono: '🔒', texto: 'Auditoría' },
-   { ruta: '/configuracion', icono: '⚙️', texto: 'Configuración' },
- ];
+    { ruta: '/dashboard', icono: '🏚️', texto: 'Inicio', exacto: true, module: 'dashboard' },
+    { ruta: '/trabajadores', icono: '👥', texto: 'Trabajadores', module: 'workers' },
+    { ruta: '/perfil-puesto', icono: '📄', texto: 'Perfiles de puesto', module: 'profiles' },
+    { ruta: '/solicitudes-cobertura', icono: '📑', texto: 'Solicitudes de cobertura', module: 'requests' },
+    { ruta: '/candidatos-compatibles', icono: '🎯', texto: 'Candidatos compatibles', module: 'candidates' },
+    { ruta: '/validacion-ocr', icono: '🛡️', texto: 'Validación documental', module: 'documents' },
+    { ruta: '/evaluacion', icono: '📝', texto: 'Evaluación', module: 'evaluations' },
+    { ruta: '/informes', icono: '📊', texto: 'Reportes', module: 'reports' },
+    { ruta: '/auditoria', icono: '🔒', texto: 'Auditoría', module: 'audit' },
+    { ruta: '/configuracion', icono: '⚙️', texto: 'Configuración', module: 'settings' },
+  ];
 
  export default function Sidebar() {
    const navigate = useNavigate();
    const [logoutError, setLogoutError] = useState('');
+   const { user, setUser } = useAuth();
 
    const cerrarSesion = async () => {
      setLogoutError('');
      try {
        await apiRequest('/auth/logout', { method: 'POST' });
+       setUser(null);
        navigate('/');
      } catch (error) {
        setLogoutError(error.message);
@@ -30,8 +34,8 @@
    };
 
    return (
-     <aside className="w-64 bg-blue-950 text-white flex flex-col justify-between shrink-0">
-       <div>
+     <aside className="flex h-screen w-64 shrink-0 flex-col justify-between bg-blue-950 text-white">
+       <div className="flex min-h-0 flex-1 flex-col">
          <div className="p-4 flex items-center gap-3 border-b border-blue-900">
            <img src="/AquijesLogo.jpg" alt="Logo Los Aquijes" className="w-12 h-12 bg-white/20 p-1 rounded-lg object-contain shrink-0" />
            <div>
@@ -40,8 +44,8 @@
           </div>
         </div>
 
-        <nav aria-label="Navegación principal" className="p-3 space-y-1.5 text-sm">
-          {enlaces.map(({ ruta, icono, texto, exacto }) => (
+        <nav aria-label="Navegación principal" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3 text-sm">
+          {enlaces.filter(({ module }) => moduleRoles[module].includes(user?.role)).map(({ ruta, icono, texto, exacto }) => (
             <NavLink
               key={ruta}
               to={ruta}

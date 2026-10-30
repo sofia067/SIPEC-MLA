@@ -1,39 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../lib/api';
+import NotificationBell from './NotificationBell';
+import { useAuth } from './AuthContext';
+import { roleNames } from '../lib/rolePermissions';
 
 export default function UserDropdown() {
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const [usuario, setUsuario] = useState(null);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-
-  useEffect(() => {
-    let active = true;
-    apiRequest('/auth/me')
-      .then(({ user }) => {
-        if (active) setUsuario(user);
-      })
-      .catch((requestError) => {
-        if (active) setError(requestError.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { user: usuario, setUser } = useAuth();
 
   const nombre = usuario?.displayName || 'Cargando usuario…';
   const iniciales = nombre.split(/\s+/).filter(Boolean).slice(0, 2).map((parte) => parte[0]).join('').toUpperCase();
-  const roles = {
-    admin: 'Administrador',
-    hr_specialist: 'Especialista de RR. HH.',
-    area_manager: 'Jefe de Área',
-  };
-
   const cerrarSesion = async () => {
     setError('');
     try {
       await apiRequest('/auth/logout', { method: 'POST' });
+      setUser(null);
       navigate('/');
     } catch (requestError) {
       setError(requestError.message);
@@ -41,7 +25,9 @@ export default function UserDropdown() {
   };
 
   return (
-    <div className="relative">
+    <div className="flex items-center gap-3">
+      <NotificationBell />
+      <div className="relative">
       {/* Botón de Perfil  */}
       <button
         onClick={() => setMenuAbierto(!menuAbierto)}
@@ -52,7 +38,7 @@ export default function UserDropdown() {
         </div>
         <div className="text-left hidden sm:block">
           <p className="text-sm font-semibold text-gray-800 leading-tight">{nombre}</p>
-          <p className="text-xs text-gray-500">{roles[usuario?.role] || ''}</p>
+          <p className="text-xs text-gray-500">{roleNames[usuario?.role] || ''}</p>
         </div>
         {/* Icono Flecha Dropdown */}
         <svg 
@@ -121,6 +107,7 @@ export default function UserDropdown() {
 
         </div>
       )}
+      </div>
     </div>
   );
 }

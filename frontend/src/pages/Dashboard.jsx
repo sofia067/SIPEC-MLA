@@ -1,4 +1,5 @@
 import UserDropdown from '../components/UserDropdown';
+import Sidebar from '../components/sidebar';
 import { useNavigate, Link } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
@@ -48,85 +49,16 @@ function Dashboard() {
     return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-PE');
   };
 
-  const cerrarSesion = async () => {
-    try {
-      await apiRequest('/auth/logout', { method: 'POST' });
-      navigate('/');
-    } catch (requestError) {
-      setError(requestError.message);
-    }
-  };
-
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
-      
-      {/* Sidebar Lateral */}
-      <aside className="w-64 bg-blue-950 text-white flex flex-col justify-between shrink-0">
-        <div>
-          {/* Logo del Sidebar */}
-          <div className="p-4 flex items-center gap-3 border-b border-blue-900">
-             <img src="/AquijesLogo.jpg" alt="Logo Los Aquijes" className="w-12 h-12 bg-white/20 p-1 rounded-lg object-contain shrink-0" />
-             <div>
-              <h1 className="font-bold text-lg tracking-wider leading-tight text-white">SIPEC-MLA</h1>
-              <p className="text-[10px] text-blue-300 font-medium">Los Aquijes</p>
-             </div>
-         </div>
-
-          {/* Menú Completo  */}
-          <nav className="p-3 space-y-1.5 text-sm">
-            <button className="w-full text-left py-2.5 px-3 rounded bg-blue-900 font-bold flex items-center gap-3 text-blue-100">
-              <span className="text-base">🏚️​</span> Inicio
-            </button>
-            <button onClick={() => navigate('/trabajadores')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">👥</span> Trabajadores
-            </button>
-            <button onClick={() => navigate('/perfil-puesto')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">📄</span> Perfiles de puesto
-            </button>
-          
-            <button 
-              onClick={() => navigate('/solicitudes-cobertura')} 
-               className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200 transition-colors" >
-              <span className="text-base">📑</span> Solicitudes de cobertura
-            </button>
-            <button onClick={() => navigate('/candidatos-compatibles')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">🎯</span> Candidatos compatibles
-            </button>
-            <button onClick={() => navigate('/validacion-ocr')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">🛡️</span> Validación documental
-            </button>
-            <button onClick={() => navigate('/evaluacion')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">📝</span> Evaluacion
-            </button>
-            <button onClick={() => navigate('/informes')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">📊</span> Reportes
-            </button>
-            <button  onClick={() => navigate('/auditoria')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">🔒</span> Auditoría
-            </button>
-            <button onClick={() => navigate('/configuracion')} className="w-full text-left py-2.5 px-3 rounded hover:bg-blue-900/50 font-medium flex items-center gap-3 text-gray-200">
-              <span className="text-base">⚙️</span> Configuración
-            </button>
-          </nav>
-        </div>
-
-        {/* Botón Salir */}
-        <div className="p-3 border-t border-blue-900">
-          <button onClick={cerrarSesion} className="w-full text-left py-2 px-3 rounded hover:bg-red-900/50 text-sm font-medium text-red-300 flex items-center gap-2">
-            ❌​ Cerrar sesión
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       {/* Área Principal de Contenido */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         
         {/* Barra Superior */}
-        <header className="bg-white border-b px-12 py-3 flex justify-end items-center gap-4">
-          <button className="text-gray-500 text-base">🔔</button>
-           {/*  componente desplegable */}
-            <UserDropdown /> 
-         
+        <header className="bg-white border-b px-4 sm:px-8 py-3 flex justify-end items-center gap-4">
+          <UserDropdown />
         </header>
 
         {/* Contenido Central */}
@@ -144,7 +76,7 @@ function Dashboard() {
             </div>
           )}
 
-          {/* Tarjetas de Métricas (Números Centrados) */}
+          {/* Tarjetas de Métricas */}
           <div className="grid grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 border-b-4 border-b-blue-900 flex flex-col items-center justify-center text-center">
               <div className="flex items-center justify-center gap-2 w-full mb-1">
