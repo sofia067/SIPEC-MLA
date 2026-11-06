@@ -1,12 +1,12 @@
 ALTER TABLE position_profiles
-  ADD COLUMN profile_code varchar(40),
-  ADD COLUMN remuneration numeric(12, 2),
-  ADD COLUMN education text NOT NULL DEFAULT '',
-  ADD COLUMN general_experience text NOT NULL DEFAULT '',
-  ADD COLUMN specific_experience text NOT NULL DEFAULT '',
-  ADD COLUMN technical_knowledge text NOT NULL DEFAULT '',
-  ADD COLUMN functions jsonb NOT NULL DEFAULT '[]'::jsonb;
+  ADD COLUMN IF NOT EXISTS profile_code varchar(40),
+  ADD COLUMN IF NOT EXISTS remuneration numeric(12, 2),
+  ADD COLUMN IF NOT EXISTS education text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS general_experience text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS specific_experience text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS technical_knowledge text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS functions jsonb NOT NULL DEFAULT '[]'::jsonb;
 
-CREATE UNIQUE INDEX position_profiles_profile_code_unique_idx
+CREATE UNIQUE INDEX IF NOT EXISTS position_profiles_profile_code_unique_idx
   ON position_profiles (profile_code)
   WHERE profile_code IS NOT NULL;
