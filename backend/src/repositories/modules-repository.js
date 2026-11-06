@@ -17,7 +17,8 @@ const workerSelect = `
 const profileSelect = `
   SELECT p.id, p.title, p.description, p.level, p.principal_requirements,
          p.profile_code, p.remuneration, p.education, p.general_experience,
-         p.specific_experience, p.technical_knowledge, p.functions,
+         p.specific_experience, array_to_string(p.technical_knowledge, E'\n') AS technical_knowledge,
+         p.functions,
          p.status, p.created_at, p.updated_at,
          d.id AS department_id, d.name AS department,
          coalesce(json_agg(json_build_object('id', c.id, 'name', c.name, 'description', c.description))
@@ -165,7 +166,8 @@ export const modulesRepository = {
         [department.rows[0].id, input.title, input.description, input.level,
           input.principalRequirements, input.status, input.profileCode || null,
           input.remuneration, input.education, input.generalExperience,
-          input.specificExperience, input.technicalKnowledge, JSON.stringify(input.functions)],
+          input.specificExperience, input.technicalKnowledge.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+          JSON.stringify(input.functions)],
       );
       const profileId = profile.rows[0].id;
       for (const competency of input.competencies) {
@@ -196,7 +198,8 @@ export const modulesRepository = {
         [id, department.rows[0].id, input.title, input.description, input.level,
           input.principalRequirements, input.status, input.profileCode || null,
           input.remuneration, input.education, input.generalExperience,
-          input.specificExperience, input.technicalKnowledge, JSON.stringify(input.functions)],
+          input.specificExperience, input.technicalKnowledge.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+          JSON.stringify(input.functions)],
       );
       if (!result.rowCount) return false;
       await client.query('DELETE FROM position_competencies WHERE position_id = $1', [id]);

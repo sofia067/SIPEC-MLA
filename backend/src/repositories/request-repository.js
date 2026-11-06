@@ -2,6 +2,12 @@ import { pool } from '../db/pool.js';
 import { AppError } from '../errors/app-error.js';
 import { getRequestIpAddress } from '../middleware/request-context.js';
 
+const priorityToDatabase = {
+  Alta: 'high',
+  Media: 'medium',
+  Baja: 'low',
+};
+
 export const requestRepository = {
   async create({ department, positionTitle, reason, priority, requiredBy, userId }) {
     const client = await pool.connect();
@@ -26,8 +32,14 @@ export const requestRepository = {
         `INSERT INTO coverage_requests
            (code, department_id, position_id, reason, priority, required_by, requested_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, code, status, priority, created_at`,
-        [code, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priority, requiredBy, userId],
+         RETURNING id, code, status,
+           CASE priority::text
+             WHEN 'high' THEN 'Alta'
+             WHEN 'medium' THEN 'Media'
+             WHEN 'low' THEN 'Baja'
+           END AS priority,
+           created_at`,
+        [code, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priorityToDatabase[priority], requiredBy, userId],
       );
       const request = requestResult.rows[0];
       await client.query(
@@ -48,7 +60,13 @@ export const requestRepository = {
   async listRecent(limit = 10, areaName = null) {
     const result = await pool.query(
       `SELECT r.id, r.code, d.name AS department, p.title AS position_title,
-              r.status, r.priority, r.required_by, r.created_at, u.display_name AS requested_by
+            r.status,
+            CASE r.priority::text
+              WHEN 'high' THEN 'Alta'
+              WHEN 'medium' THEN 'Media'
+              WHEN 'low' THEN 'Baja'
+            END AS priority,
+            r.required_by, r.created_at, u.display_name AS requested_by
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
@@ -64,7 +82,13 @@ export const requestRepository = {
   async listAll(areaName = null) {
     const result = await pool.query(
       `SELECT r.id, r.code, r.department_id, r.position_id, d.name AS department,
-              p.title AS position_title, r.reason, r.status, r.priority, r.required_by, r.created_at,
+            p.title AS position_title, r.reason, r.status,
+            CASE r.priority::text
+              WHEN 'high' THEN 'Alta'
+              WHEN 'medium' THEN 'Media'
+              WHEN 'low' THEN 'Baja'
+            END AS priority,
+            r.required_by, r.created_at,
               r.reviewed_at, u.display_name AS requested_by
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
@@ -81,7 +105,7 @@ export const requestRepository = {
     const result = await pool.query(
       `SELECT r.id, r.code, p.title AS position_title, d.name AS department,
               p.description, p.education, p.general_experience, p.specific_experience,
-              p.technical_knowledge
+              array_to_string(p.technical_knowledge, E'\n') AS technical_knowledge
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
@@ -137,10 +161,10 @@ export const requestRepository = {
       );
       const result = await client.query(
         `UPDATE coverage_requests SET department_id = $2, position_id = $3, reason = $4,
-           priority = $5, required_by = $6, updated_at = now()
+           priority = $5::request_priority, required_by = $6, updated_at = now()
          WHERE id = $1 AND status = 'pending'
          RETURNING id, code, status, updated_at`,
-        [id, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priority, requiredBy],
+        [id, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priorityToDatabase[priority], requiredBy],
       );
       if (result.rowCount) {
         await client.query(
