@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Sidebar from '../components/sidebar';
+import NotificationBell from '../components/NotificationBell';
 
 export default function MiPerfil() {
   // Datos del usuario con sesión activa
@@ -43,7 +44,8 @@ export default function MiPerfil() {
         {/* Header */}
         <header className="bg-white border-b px-8 py-3 flex justify-between items-center">
           <h1 className="text-xl font-bold text-blue-950">SIPEC-MLA</h1>
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm">
+            <NotificationBell />
             <div className="w-8 h-8 rounded-full bg-blue-900 text-white font-bold flex items-center justify-center text-xs">
               CR
             </div>

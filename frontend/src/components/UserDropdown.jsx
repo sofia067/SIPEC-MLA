@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom'; // Asegúrate de tener instalado react-router-dom
 import { useAuth } from '../auth/AuthContext';
+import NotificationBell from './NotificationBell';
 
 export default function UserDropdown() {
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -10,6 +11,7 @@ export default function UserDropdown() {
     admin: 'Administrador',
     hr_specialist: 'Especialista RR.HH.',
     area_manager: 'Jefe de Área',
+    committee: 'Evaluador / Comité',
   };
   const initials = (user?.displayName || user?.username || '?')
     .split(/\s+/)
@@ -28,7 +30,9 @@ export default function UserDropdown() {
   };
 
   return (
-    <div className="relative">
+    <div className="flex items-center gap-2">
+      <NotificationBell />
+      <div className="relative">
       {/* Botón de Perfil  */}
       <button 
         onClick={() => setMenuAbierto(!menuAbierto)}
@@ -74,7 +78,7 @@ export default function UserDropdown() {
               <span>Mi Perfil</span>
             </Link>
 
-            <Link
+            {user?.role === 'admin' && <Link
               to="/configuracion"
               onClick={() => setMenuAbierto(false)}
               className="w-full text-left flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-900 transition-colors"
@@ -84,7 +88,7 @@ export default function UserDropdown() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <span>Configuración</span>
-            </Link>
+            </Link>}
 
             <button 
               onClick={() => alert("Módulo de Seguridad/Contraseña en desarrollo")}
@@ -114,6 +118,7 @@ export default function UserDropdown() {
 
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
 import { apiRequest } from '../services/api';
+import { useAuth } from '../auth/AuthContext';
 
 const emptyProfile = {
   title: '',
@@ -38,6 +39,8 @@ function ProfileField({ label, value, onChange, rows = 1, required = false, type
 
 export default function PerfilPuesto() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const puedeGestionarPerfiles = ['admin', 'hr_specialist'].includes(user?.role);
   const [profiles, setProfiles] = useState([]);
   const [areaFilter, setAreaFilter] = useState('Todas');
   const [search, setSearch] = useState('');
@@ -146,9 +149,11 @@ export default function PerfilPuesto() {
               <h2 className="text-2xl font-bold">Perfiles de Puesto</h2>
               <p className="text-sm text-gray-500">Gestión de requisitos, competencias y funciones por unidad orgánica</p>
             </div>
-            <button onClick={() => { setError(''); setShowForm(true); }} className="bg-blue-950 hover:bg-blue-900 text-white font-semibold text-sm px-4 py-2.5 rounded-lg">
-              + Nuevo perfil
-            </button>
+            {puedeGestionarPerfiles && (
+              <button onClick={() => { setError(''); setShowForm(true); }} className="bg-blue-950 hover:bg-blue-900 text-white font-semibold text-sm px-4 py-2.5 rounded-lg">
+                + Nuevo perfil
+              </button>
+            )}
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4">
@@ -174,7 +179,7 @@ export default function PerfilPuesto() {
                   <th className="py-3 px-4">Nivel</th>
                   <th className="py-3 px-4">Remuneración</th>
                   <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-center">Acciones</th>
+                  <th className="py-3 px-4 text-center">Detalle{puedeGestionarPerfiles ? ' / Acciones' : ''}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -195,7 +200,7 @@ export default function PerfilPuesto() {
                     <td className="py-3 px-4">
                       <div className="flex justify-center gap-2">
                         <button onClick={() => navigate(`/perfil-puesto/detalle/${profile.id}`)} className="text-blue-900 hover:underline font-semibold">Ver ficha</button>
-                        {profile.status === 'active' && (
+                        {puedeGestionarPerfiles && profile.status === 'active' && (
                           <button
                             onClick={() => deactivateProfile(profile)}
                             disabled={deactivating === profile.id}
@@ -216,7 +221,7 @@ export default function PerfilPuesto() {
         </main>
       </div>
 
-      {showForm && (
+      {puedeGestionarPerfiles && showForm && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
           <div role="dialog" aria-modal="true" aria-labelledby="profile-form-title" className="mx-auto my-8 w-full max-w-4xl rounded-xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between border-b pb-3">

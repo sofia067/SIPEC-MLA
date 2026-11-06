@@ -10,6 +10,7 @@ import { hashPassword } from '../security/password.js';
 import { documentService } from '../services/document-service.js';
 import { extractText } from '../services/ocr-service.js';
 import { scoreResumeMatch } from '../services/match-scoring.js';
+import { getAreaScope } from '../middleware/role-scope.js';
 
 const idSchema = z.uuid();
 const nonEmptyText = (max) => z.string().trim().min(1).max(max);
@@ -83,13 +84,13 @@ const assignmentSchema = z.object({
 const createUserSchema = z.object({
   username: nonEmptyText(80).toLowerCase(),
   displayName: nonEmptyText(160),
-  role: z.enum(['admin', 'hr_specialist', 'area_manager']),
+  role: z.enum(['admin', 'hr_specialist', 'area_manager', 'committee']),
   areaName: z.string().trim().max(160).default(''),
   password: z.string().min(12).max(256),
 });
 const updateUserSchema = z.object({
   displayName: nonEmptyText(160),
-  role: z.enum(['admin', 'hr_specialist', 'area_manager']),
+  role: z.enum(['admin', 'hr_specialist', 'area_manager', 'committee']),
   areaName: z.string().trim().max(160).default(''),
   password: z.union([z.literal(''), z.string().min(12).max(256)]).optional().default(''),
   isActive: z.boolean(),
@@ -97,6 +98,19 @@ const updateUserSchema = z.object({
 const applicationSettingsSchema = z.object({
   anonymizationEnabled: z.boolean(),
   ocrConfidenceThreshold: z.number().int().min(0).max(100),
+  institutionalData: z.object({
+    rof: z.string().trim().max(120),
+    logoUrl: z.string().trim().max(500),
+    acronym: z.string().trim().min(1).max(40),
+    address: z.string().trim().max(240),
+    fiscalYear: z.number().int().min(2000).max(2200),
+  }).optional(),
+  catalogData: z.object({
+    roadTypes: z.array(nonEmptyText(100)).max(100),
+    laborRegimes: z.array(nonEmptyText(100)).max(100),
+    contractTypes: z.array(nonEmptyText(100)).max(100),
+    organizationalAreas: z.array(nonEmptyText(160)).max(200),
+  }).optional(),
 });
 const blindCandidateSchema = z.object({
   requestId: idSchema,
@@ -143,9 +157,13 @@ export function createModuleRouter() {
   const router = Router();
   router.use(authenticate);
 
-  router.get('/lookups', async (req, res) => res.json(await modulesRepository.getLookups()));
+  router.get('/lookups', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => (
+    res.json(await modulesRepository.getLookups(getAreaScope(req.user)))
+  ));
 
-  router.get('/workers', async (req, res) => res.json({ workers: await modulesRepository.listWorkers() }));
+  router.get('/workers', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => (
+    res.json({ workers: await modulesRepository.listWorkers(getAreaScope(req.user)) })
+  ));
   router.post('/workers', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = workerSchema.omit({ status: true }).parse(req.body);
     res.status(201).json({ worker: await modulesRepository.createWorker(input, req.user.id) });
@@ -159,22 +177,26 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/profiles', async (req, res) => res.json({ profiles: await modulesRepository.listProfiles() }));
-  router.post('/profiles', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
+  router.get('/profiles', authorize('admin', 'hr_specialist', 'area_manager', 'committee'), async (req, res) => (
+    res.json({ profiles: await modulesRepository.listProfiles(getAreaScope(req.user)) })
+  ));
+  router.post('/profiles', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = profileSchema.parse(req.body);
     res.status(201).json({ id: await modulesRepository.createProfile(input, req.user.id) });
   });
-  router.patch('/profiles/:id', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
+  router.patch('/profiles/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = profileSchema.parse(req.body);
     await findOr404(() => modulesRepository.updateProfile(requireId(req.params.id), input, req.user.id));
     res.json({ id: req.params.id });
   });
-  router.delete('/profiles/:id', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
+  router.delete('/profiles/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
     await findOr404(() => modulesRepository.deleteProfile(requireId(req.params.id), req.user.id));
     res.status(204).end();
   });
 
-  router.get('/requests', async (req, res) => res.json({ requests: await requestRepository.listAll() }));
+  router.get('/requests', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => (
+    res.json({ requests: await requestRepository.listAll(getAreaScope(req.user)) })
+  ));
   router.patch('/requests/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = requestDetailsSchema.parse(req.body);
     if (input.requiredBy && input.requiredBy < new Date().toISOString().slice(0, 10)) {
@@ -205,7 +227,9 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/documents', async (req, res) => res.json({ documents: await modulesRepository.listWorkItems('documents') }));
+  router.get('/documents', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => (
+    res.json({ documents: await modulesRepository.listWorkItems('documents') })
+  ));
   router.post('/documents', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = documentSchema.parse(req.body);
     res.status(201).json({ document: await modulesRepository.createWorkItem('documents', input, req.user.id) });
@@ -219,7 +243,7 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/evaluations', async (req, res) => res.json({ evaluations: await modulesRepository.listWorkItems('evaluations') }));
+  router.get('/evaluations', authorize('admin', 'hr_specialist'), async (req, res) => res.json({ evaluations: await modulesRepository.listWorkItems('evaluations') }));
   router.post('/evaluations', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = evaluationSchema.parse(req.body);
     res.status(201).json({ evaluation: await modulesRepository.createWorkItem('evaluations', input, req.user.id) });
@@ -233,11 +257,11 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/blind-selection/banks', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.get('/blind-selection/banks', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
     res.json({ banks: modulesRepository.getBlindSelectionBanks() });
   });
-  router.get('/blind-selection/candidates', authorize('admin', 'hr_specialist'), async (req, res) => {
-    res.json({ candidates: await modulesRepository.listBlindSelectionCandidates() });
+  router.get('/blind-selection/candidates', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
+    res.json({ candidates: await modulesRepository.listBlindSelectionCandidates(getAreaScope(req.user)) });
   });
   router.post('/blind-selection/candidates/:id/match', authorize('admin', 'hr_specialist'), async (req, res, next) => {
     try {
@@ -279,7 +303,7 @@ export function createModuleRouter() {
     const candidate = await modulesRepository.createBlindSelectionCandidate(input, req.user.id);
     res.status(201).json({ candidate });
   });
-  router.post('/blind-selection/candidates/:id/exam', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.post('/blind-selection/candidates/:id/exam', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
     const { answers } = blindExamSchema.parse(req.body);
     const exam = await modulesRepository.submitBlindSelectionExam(
       requireId(req.params.id),
@@ -288,14 +312,14 @@ export function createModuleRouter() {
     );
     res.status(201).json({ exam });
   });
-  router.get('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.get('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
     const exam = await findOr404(
       () => modulesRepository.getBlindSelectionExamForReview(requireId(req.params.id)),
       'No se encontró un examen para revisar.',
     );
     res.json({ exam });
   });
-  router.patch('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.patch('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
     const { status } = blindExamReviewSchema.parse(req.body);
     const result = await modulesRepository.reviewBlindSelectionExam(
       requireId(req.params.id),
@@ -309,7 +333,7 @@ export function createModuleRouter() {
     const document = await documentService.attachFile(req.params.id, req.file, req.user.id);
     res.status(202).json({ document });
   });
-  router.get('/documents/:id/file', async (req, res) => {
+  router.get('/documents/:id/file', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
     const file = await findOr404(
       () => modulesRepository.getDocumentFile(requireId(req.params.id)),
       'El documento no tiene archivo adjunto.',
@@ -321,7 +345,9 @@ export function createModuleRouter() {
     res.status(202).json({ document: await documentService.reprocessOcr(requireId(req.params.id)) });
   });
 
-  router.get('/assignments', async (req, res) => res.json({ assignments: await modulesRepository.listAssignments() }));
+  router.get('/assignments', authorize('admin', 'hr_specialist'), async (req, res) => (
+    res.json({ assignments: await modulesRepository.listAssignments() })
+  ));
   router.post('/assignments', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = assignmentSchema.parse(req.body);
     res.status(201).json({ assignment: await modulesRepository.createAssignment(input, req.user.id) });
@@ -335,16 +361,16 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/reports', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.get('/reports', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
     const type = z.enum(['requests', 'workers', 'evaluations']).parse(req.query.type ?? 'requests');
-    res.json({ type, rows: await modulesRepository.getReportData(type) });
+    res.json({ type, rows: await modulesRepository.getReportData(type, getAreaScope(req.user)) });
   });
-  router.get('/reports/kpis', authorize('admin', 'hr_specialist'), async (req, res) => {
-    res.json(await modulesRepository.getReportKpis());
+  router.get('/reports/kpis', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
+    res.json(await modulesRepository.getReportKpis(getAreaScope(req.user)));
   });
-  router.get('/reports/:type.csv', authorize('admin', 'hr_specialist'), async (req, res) => {
+  router.get('/reports/:type.csv', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => {
     const type = z.enum(['requests', 'workers', 'evaluations']).parse(req.params.type);
-    const rows = await modulesRepository.getReportData(type);
+    const rows = await modulesRepository.getReportData(type, getAreaScope(req.user));
     const columns = rows.length ? Object.keys(rows[0]) : [];
     const content = [columns, ...rows.map((row) => columns.map((column) => row[column]))]
       .map((row) => row.map(csvCell).join(','))

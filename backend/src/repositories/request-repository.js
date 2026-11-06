@@ -1,5 +1,6 @@
 import { pool } from '../db/pool.js';
 import { AppError } from '../errors/app-error.js';
+import { getRequestIpAddress } from '../middleware/request-context.js';
 
 export const requestRepository = {
   async create({ department, positionTitle, reason, priority, requiredBy, userId }) {
@@ -30,9 +31,9 @@ export const requestRepository = {
       );
       const request = requestResult.rows[0];
       await client.query(
-        `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata)
-         VALUES ($1, 'coverage_request.created', 'coverage_request', $2, $3)`,
-        [userId, request.id, JSON.stringify({ code })],
+        `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata, ip_address)
+         VALUES ($1, 'coverage_request.created', 'coverage_request', $2, $3, $4)`,
+        [userId, request.id, JSON.stringify({ code }), getRequestIpAddress()],
       );
       await client.query('COMMIT');
       return request;
@@ -44,7 +45,7 @@ export const requestRepository = {
     }
   },
 
-  async listRecent(limit = 10) {
+  async listRecent(limit = 10, areaName = null) {
     const result = await pool.query(
       `SELECT r.id, r.code, d.name AS department, p.title AS position_title,
               r.status, r.priority, r.required_by, r.created_at, u.display_name AS requested_by
@@ -52,14 +53,15 @@ export const requestRepository = {
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
        JOIN users u ON u.id = r.requested_by
+       WHERE ($2::text IS NULL OR lower(d.name) = lower($2))
        ORDER BY r.created_at DESC
        LIMIT $1`,
-      [limit],
+      [limit, areaName],
     );
     return result.rows;
   },
 
-  async listAll() {
+  async listAll(areaName = null) {
     const result = await pool.query(
       `SELECT r.id, r.code, r.department_id, r.position_id, d.name AS department,
               p.title AS position_title, r.reason, r.status, r.priority, r.required_by, r.created_at,
@@ -68,7 +70,9 @@ export const requestRepository = {
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
        JOIN users u ON u.id = r.requested_by
+       WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
        ORDER BY r.created_at DESC`,
+      [areaName],
     );
     return result.rows;
   },
@@ -102,9 +106,9 @@ export const requestRepository = {
       );
       if (result.rowCount) {
         await client.query(
-          `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata)
-           VALUES ($1, 'coverage_request.status_changed', 'coverage_request', $2, $3)`,
-          [userId, result.rows[0].id, JSON.stringify({ status })],
+          `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata, ip_address)
+           VALUES ($1, 'coverage_request.status_changed', 'coverage_request', $2, $3, $4)`,
+          [userId, result.rows[0].id, JSON.stringify({ status }), getRequestIpAddress()],
         );
       }
       await client.query('COMMIT');
@@ -140,9 +144,9 @@ export const requestRepository = {
       );
       if (result.rowCount) {
         await client.query(
-          `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id)
-           VALUES ($1, 'coverage_request.updated', 'coverage_request', $2)`,
-          [userId, id],
+          `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, ip_address)
+           VALUES ($1, 'coverage_request.updated', 'coverage_request', $2, $3)`,
+          [userId, id, getRequestIpAddress()],
         );
       }
       await client.query('COMMIT');
@@ -178,9 +182,9 @@ export const requestRepository = {
         return null;
       }
       await client.query(
-        `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata)
-         VALUES ($1, 'coverage_request.deleted', 'coverage_request', $2, $3)`,
-        [userId, result.rows[0].id, JSON.stringify({ code: result.rows[0].code })],
+        `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata, ip_address)
+         VALUES ($1, 'coverage_request.deleted', 'coverage_request', $2, $3, $4)`,
+        [userId, result.rows[0].id, JSON.stringify({ code: result.rows[0].code }), getRequestIpAddress()],
       );
       await client.query('COMMIT');
       return result.rows[0];
@@ -192,7 +196,26 @@ export const requestRepository = {
     }
   },
 
-  async getDashboardSummary() {
+  async getDashboardSummary(areaName = null) {
+    if (areaName) {
+      const result = await pool.query(
+        `SELECT count(*) FILTER (WHERE status = 'pending')::int AS pending_requests,
+                0::int AS pending_validations,
+                0::int AS pending_evaluations,
+                0::int AS completed_assignments,
+                0::int AS pending_documents,
+                0::int AS pending_technical_evaluations,
+                count(*) FILTER (
+                  WHERE status IN ('pending', 'in_review')
+                    AND required_by BETWEEN CURRENT_DATE AND CURRENT_DATE + 7
+                )::int AS expiring_requests
+         FROM coverage_requests r
+         JOIN departments d ON d.id = r.department_id
+         WHERE lower(d.name) = lower($1)`,
+        [areaName],
+      );
+      return result.rows[0];
+    }
     const result = await pool.query(`
       SELECT
         (SELECT count(*)::int FROM coverage_requests WHERE status = 'pending') AS pending_requests,

@@ -111,6 +111,7 @@ function Login() {
                 <option value="">Seleccione su rol</option>
                 <option value="jefe">Jefe de Área</option>
                 <option value="rrhh">Especialista RR.HH.</option>
+                <option value="comite">Evaluador / Comité</option>
                 <option value="admin">Administrador</option>
               </select>
             </div>

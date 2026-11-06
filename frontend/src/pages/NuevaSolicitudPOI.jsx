@@ -41,7 +41,6 @@ return (
           </button>
 
           <div className="flex items-center gap-4">
-            <button className="text-gray-500 text-base">🔔</button>
             {/* Reutilizo el drow menu */}
             <UserDropdown />
           </div>

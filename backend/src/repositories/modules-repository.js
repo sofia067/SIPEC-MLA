@@ -1,6 +1,8 @@
 import { pool } from '../db/pool.js';
 import { AppError } from '../errors/app-error.js';
 import { EVALUATION_BANKS } from '../data/evaluation-banks.js';
+import { getRequestIpAddress } from '../middleware/request-context.js';
+import { getAreaScope } from '../middleware/role-scope.js';
 
 const workerSelect = `
   SELECT w.id, w.employee_number, w.document_number, w.full_name, w.email, w.phone,
@@ -25,11 +27,19 @@ const profileSelect = `
   LEFT JOIN position_competencies c ON c.position_id = p.id
 `;
 
+function validateEvaluationBank(bank) {
+  const objectiveCount = bank.preguntas.filter((question) => question.tipo === 'opcion').length;
+  const writtenCount = bank.preguntas.filter((question) => question.tipo === 'escrita').length;
+  if (bank.preguntas.length !== 20 || objectiveCount !== 15 || writtenCount !== 5) {
+    throw new AppError(500, 'INVALID_EVALUATION_BANK', `El banco de evaluación para «${bank.puesto}» debe tener 15 preguntas objetivas y 5 de desarrollo.`);
+  }
+}
+
 async function recordAudit(client, actorId, eventType, resourceType, resourceId, metadata = {}) {
   await client.query(
-    `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [actorId, eventType, resourceType, resourceId, JSON.stringify(metadata)],
+    `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata, ip_address)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [actorId, eventType, resourceType, resourceId, JSON.stringify(metadata), getRequestIpAddress()],
   );
 }
 
@@ -49,17 +59,20 @@ async function withTransaction(action) {
 }
 
 export const modulesRepository = {
-  async getLookups() {
+  async getLookups(areaName = null) {
     const [departments, profiles, workers, requests] = await Promise.all([
-      pool.query('SELECT id, name FROM departments ORDER BY name'),
+      pool.query('SELECT id, name FROM departments WHERE ($1::text IS NULL OR lower(name) = lower($1)) ORDER BY name', [areaName]),
       pool.query(
         `SELECT p.id, p.title, d.name AS department
          FROM position_profiles p JOIN departments d ON d.id = p.department_id
-         WHERE p.status = 'active'
+         WHERE p.status = 'active' AND ($1::text IS NULL OR lower(d.name) = lower($1))
          ORDER BY d.name, p.title`,
+        [areaName],
       ),
-      pool.query('SELECT id, full_name FROM workers WHERE status = $1 ORDER BY full_name', ['active']),
-      pool.query('SELECT id, code FROM coverage_requests ORDER BY created_at DESC LIMIT 500'),
+      pool.query(`SELECT w.id, w.full_name FROM workers w JOIN departments d ON d.id = w.department_id
+                  WHERE w.status = 'active' AND ($1::text IS NULL OR lower(d.name) = lower($1)) ORDER BY w.full_name`, [areaName]),
+      pool.query(`SELECT r.id, r.code FROM coverage_requests r JOIN departments d ON d.id = r.department_id
+                  WHERE ($1::text IS NULL OR lower(d.name) = lower($1)) ORDER BY r.created_at DESC LIMIT 500`, [areaName]),
     ]);
     return {
       departments: departments.rows,
@@ -69,8 +82,8 @@ export const modulesRepository = {
     };
   },
 
-  async listWorkers() {
-    const result = await pool.query(`${workerSelect} ORDER BY w.full_name`);
+  async listWorkers(areaName = null) {
+    const result = await pool.query(`${workerSelect} WHERE ($1::text IS NULL OR lower(d.name) = lower($1)) ORDER BY w.full_name`, [areaName]);
     return result.rows;
   },
 
@@ -130,8 +143,8 @@ export const modulesRepository = {
     });
   },
 
-  async listProfiles() {
-    const result = await pool.query(`${profileSelect} GROUP BY p.id, d.id ORDER BY d.name, p.title`);
+  async listProfiles(areaName = null) {
+    const result = await pool.query(`${profileSelect} WHERE ($1::text IS NULL OR lower(d.name) = lower($1)) GROUP BY p.id, d.id ORDER BY d.name, p.title`, [areaName]);
     return result.rows;
   },
 
@@ -430,7 +443,9 @@ export const modulesRepository = {
         `INSERT INTO users (username, display_name, role, area_name, password_hash)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, username, display_name, role::text AS role, area_name, is_active`,
-        [input.username, input.displayName, input.role, input.areaName || null, passwordHash],
+        [input.username, input.displayName, input.role,
+          input.areaName || (input.role === 'area_manager' ? 'Subgerencia de Logística y Control Patrimonial' : null),
+          passwordHash],
       );
       await recordAudit(client, actorId, 'user.created', 'user', result.rows[0].id, { role: input.role });
       return result.rows[0];
@@ -488,6 +503,7 @@ export const modulesRepository = {
   async listAuditEvents() {
     const result = await pool.query(
       `SELECT e.id, e.event_type, e.resource_type, e.resource_id, e.metadata, e.created_at,
+              host(e.ip_address) AS ip_address,
               u.username, u.display_name
        FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
        ORDER BY e.created_at DESC LIMIT 500`,
@@ -495,7 +511,15 @@ export const modulesRepository = {
     return result.rows;
   },
 
-  async listBlindSelectionCandidates() {
+  async recordAuthenticationEvent(actorId, eventType) {
+    await pool.query(
+      `INSERT INTO audit_events (actor_id, event_type, resource_type, metadata, ip_address)
+       VALUES ($1, $2, 'session', '{}'::jsonb, $3)`,
+      [actorId, eventType, getRequestIpAddress()],
+    );
+  },
+
+  async listBlindSelectionCandidates(areaName = null) {
     const result = await pool.query(
       `SELECT c.id, c.application_code, c.request_id, r.code AS request_code,
               p.title AS position_title, c.is_demo, (c.resume_file_path IS NOT NULL) AS has_resume,
@@ -509,9 +533,12 @@ export const modulesRepository = {
               CASE WHEN c.identity_revealed_at IS NOT NULL THEN c.phone END AS phone
        FROM blind_candidates c
        JOIN coverage_requests r ON r.id = c.request_id
+       JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
        LEFT JOIN blind_candidate_exams e ON e.candidate_id = c.id
+       WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
        ORDER BY c.created_at DESC`,
+      [areaName],
     );
     return result.rows;
   },
@@ -596,6 +623,7 @@ export const modulesRepository = {
       throw new AppError(409, 'EXAM_NOT_REVIEWABLE', 'Solo se pueden revisar respuestas pendientes de postulantes con puntaje objetivo perfecto.');
     }
     const bank = EVALUATION_BANKS.find((item) => item.puesto === candidate.position_title);
+    if (bank) validateEvaluationBank(bank);
     return {
       ...candidate,
       written_questions: bank?.preguntas
@@ -692,6 +720,7 @@ export const modulesRepository = {
       if (!bank) {
         throw new AppError(409, 'NO_EVALUATION_BANK', 'No hay un banco de evaluación configurado para el puesto de esta solicitud.');
       }
+      validateEvaluationBank(bank);
       if (answers.length !== bank.preguntas.length) {
         throw new AppError(400, 'INVALID_ANSWERS', 'Debes responder todas las preguntas del examen.');
       }
@@ -783,17 +812,22 @@ export const modulesRepository = {
   },
 
   getBlindSelectionBanks() {
-    return EVALUATION_BANKS.map((bank) => ({
+    return EVALUATION_BANKS.map((bank) => {
+      validateEvaluationBank(bank);
+      return ({
       puesto: bank.puesto,
       gerencia: bank.gerencia,
       preguntas: bank.preguntas.map(({ tipo, texto, opciones }) => ({ tipo, texto, ...(opciones ? { opciones } : {}) })),
-    }));
+      });
+    });
   },
 
   async getApplicationSettings() {
     const result = await pool.query(
       `SELECT anonymization_enabled AS "anonymizationEnabled",
-              ocr_confidence_threshold AS "ocrConfidenceThreshold"
+              ocr_confidence_threshold AS "ocrConfidenceThreshold",
+              institutional_data AS "institutionalData",
+              catalog_data AS "catalogData"
        FROM application_settings
        WHERE id = 1`,
     );
@@ -805,40 +839,58 @@ export const modulesRepository = {
       const result = await client.query(
         `UPDATE application_settings
          SET anonymization_enabled = $1, ocr_confidence_threshold = $2,
-             updated_by = $3, updated_at = now()
+             institutional_data = COALESCE($3::jsonb, institutional_data),
+             catalog_data = COALESCE($4::jsonb, catalog_data),
+             updated_by = $5, updated_at = now()
          WHERE id = 1
          RETURNING anonymization_enabled AS "anonymizationEnabled",
-                   ocr_confidence_threshold AS "ocrConfidenceThreshold"`,
-        [input.anonymizationEnabled, input.ocrConfidenceThreshold, actorId],
+                   ocr_confidence_threshold AS "ocrConfidenceThreshold",
+                   institutional_data AS "institutionalData",
+                   catalog_data AS "catalogData"`,
+        [
+          input.anonymizationEnabled,
+          input.ocrConfidenceThreshold,
+          input.institutionalData ? JSON.stringify(input.institutionalData) : null,
+          input.catalogData ? JSON.stringify(input.catalogData) : null,
+          actorId,
+        ],
       );
       await recordAudit(client, actorId, 'application_settings.updated', 'application_settings', null, input);
       return result.rows[0];
     });
   },
 
-  async getReportKpis() {
+  async getReportKpis(areaName = null) {
     const [requests, documents, workers, departments] = await Promise.all([
       pool.query(
         `SELECT count(*)::int AS total,
                 count(*) FILTER (WHERE status IN ('pending', 'in_review'))::int AS pending
-         FROM coverage_requests`,
+         FROM coverage_requests r JOIN departments d ON d.id = r.department_id
+         WHERE ($1::text IS NULL OR lower(d.name) = lower($1))`,
+        [areaName],
       ),
       pool.query(
         `SELECT count(*)::int AS completed
-         FROM document_validations
-         WHERE ocr_status = 'completed'`,
+         FROM document_validations v
+         JOIN coverage_requests r ON r.id = v.request_id
+         JOIN departments d ON d.id = r.department_id
+         WHERE v.ocr_status = 'completed' AND ($1::text IS NULL OR lower(d.name) = lower($1))`,
+        [areaName],
       ),
       pool.query(
         `SELECT count(*)::int AS active
-         FROM workers
-         WHERE status = 'active'`,
+         FROM workers w JOIN departments d ON d.id = w.department_id
+         WHERE w.status = 'active' AND ($1::text IS NULL OR lower(d.name) = lower($1))`,
+        [areaName],
       ),
       pool.query(
         `SELECT d.name AS department, count(r.id)::int AS total
          FROM departments d
          JOIN coverage_requests r ON r.department_id = d.id
+         WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
          GROUP BY d.id, d.name
          ORDER BY total DESC, d.name`,
+        [areaName],
       ),
     ]);
 
@@ -851,28 +903,36 @@ export const modulesRepository = {
     };
   },
 
-  async getReportData(type) {
+  async getReportData(type, areaName = null) {
     const queries = {
       requests: `SELECT r.code, d.name AS department, p.title AS position, r.status::text AS status,
-                        r.required_by, u.display_name AS requested_by, r.created_at
+                        r.required_by, u.display_name AS requested_by, r.created_at, r.reviewed_at,
+                        CASE WHEN r.reviewed_at IS NOT NULL
+                          THEN round((extract(epoch FROM (r.reviewed_at - r.created_at)) / 86400)::numeric, 1)
+                        END AS response_days
                  FROM coverage_requests r
                  JOIN departments d ON d.id = r.department_id
                  JOIN position_profiles p ON p.id = r.position_id
                  JOIN users u ON u.id = r.requested_by
+                 WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
                  ORDER BY r.created_at DESC`,
       workers: `SELECT w.employee_number, w.document_number, w.full_name, w.email, w.phone,
                        d.name AS department, p.title AS position, w.status::text AS status
                 FROM workers w JOIN departments d ON d.id = w.department_id
                 LEFT JOIN position_profiles p ON p.id = w.position_id
+                WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
                 ORDER BY w.full_name`,
       evaluations: `SELECT e.evaluation_name, e.candidate_name, e.status::text AS status, e.score,
                             r.code AS request_code, w.full_name AS worker, e.created_at
                      FROM technical_evaluations e
                      LEFT JOIN coverage_requests r ON r.id = e.request_id
                      LEFT JOIN workers w ON w.id = e.worker_id
+                     LEFT JOIN departments rd ON rd.id = r.department_id
+                     LEFT JOIN departments wd ON wd.id = w.department_id
+                     WHERE ($1::text IS NULL OR lower(coalesce(rd.name, wd.name)) = lower($1))
                      ORDER BY e.created_at DESC`,
     };
-    const result = await pool.query(queries[type]);
+    const result = await pool.query(queries[type], [areaName]);
     return result.rows;
   },
 };

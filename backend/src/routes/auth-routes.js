@@ -2,15 +2,17 @@ import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authenticate.js';
+import { modulesRepository } from '../repositories/modules-repository.js';
 import { authService } from '../services/auth-service.js';
 
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(80),
   password: z.string().min(1).max(256),
-  role: z.enum(['jefe', 'rrhh', 'admin']).transform((role) => ({
+  role: z.enum(['jefe', 'rrhh', 'admin', 'comite']).transform((role) => ({
     jefe: 'area_manager',
     rrhh: 'hr_specialist',
     admin: 'admin',
+    comite: 'committee',
   })[role]),
 });
 const loginLimiter = rateLimit({
@@ -37,6 +39,12 @@ export function createAuthRouter({ secureCookies }) {
     try {
       const credentials = loginSchema.parse(req.body);
       const session = await authService.login(credentials.username, credentials.password, credentials.role);
+      try {
+        await modulesRepository.recordAuthenticationEvent(session.user.id, 'auth.login');
+      } catch (error) {
+        await authService.logout(session.token);
+        throw error;
+      }
       res.cookie('sipec_session', session.token, cookieOptions(secureCookies, session.expiresAt.getTime() - Date.now()));
       return res.json({ user: session.user });
     } catch (error) {
@@ -48,6 +56,8 @@ export function createAuthRouter({ secureCookies }) {
 
   router.post('/logout', async (req, res, next) => {
     try {
+      const user = await authService.getUserFromToken(req.cookies.sipec_session);
+      if (user) await modulesRepository.recordAuthenticationEvent(user.id, 'auth.logout');
       await authService.logout(req.cookies.sipec_session);
       res.clearCookie('sipec_session', cookieOptions(secureCookies));
       return res.status(204).end();
