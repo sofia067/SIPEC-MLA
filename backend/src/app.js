@@ -1,6 +1,8 @@
 import cookieParser from 'cookie-parser';
 import express from 'express';
 import helmet from 'helmet';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { env } from './config/env.js';
 import { pool } from './db/pool.js';
 import { AppError } from './errors/app-error.js';
@@ -12,6 +14,7 @@ import { createPublicApplicationRouter } from './routes/public-application-route
 import { createRequestRouter } from './routes/request-routes.js';
 
 export const app = express();
+const frontendBuildDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../frontend/dist');
 
 app.disable('x-powered-by');
 app.use(helmet());
@@ -34,4 +37,13 @@ app.use('/api', createPublicApplicationRouter());
 app.use('/api', createRequestRouter());
 app.use('/api', createModuleRouter());
 app.use('/api', notFoundHandler);
+
+app.use(express.static(frontendBuildDirectory));
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || !req.accepts('html')) return next();
+  return res.sendFile(resolve(frontendBuildDirectory, 'index.html'), (error) => {
+    if (error) next(error);
+  });
+});
+app.use(notFoundHandler);
 app.use(errorHandler);
