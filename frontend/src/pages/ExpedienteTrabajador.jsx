@@ -7,10 +7,10 @@ export default function ExpedienteTrabajador() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+    <div className="app-shell flex h-dvh flex-col bg-gray-100 font-sans text-gray-800 md:flex-row">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto">
         <header className="bg-white border-b px-8 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-950">SIPEC-MLA</h1>
@@ -32,7 +32,7 @@ export default function ExpedienteTrabajador() {
             <span className="text-xs text-gray-400 font-mono">Código de Servidor: TR-402</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
             {/* Tarjeta de Identidad y Foto */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 text-center">
               <div className="w-24 h-24 rounded-full bg-blue-950 text-amber-400 font-bold text-2xl flex items-center justify-center mx-auto shadow-md">
@@ -55,7 +55,7 @@ export default function ExpedienteTrabajador() {
             </div>
 
             {/* Contenido del Legajo Curricular y Evaluaciones */}
-            <div className="col-span-2 space-y-6">
+            <div className="space-y-6 lg:col-span-2">
               {/* Formación Académica */}
               <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-3">
                 <h4 className="font-bold text-sm text-gray-800 border-b pb-2 flex items-center gap-2">

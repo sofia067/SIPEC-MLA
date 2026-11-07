@@ -20,13 +20,13 @@ export default function NuevaSolicitudPOI() {
     prioridad: 'Alta'
   });
 return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+    <div className="app-shell flex h-dvh flex-col bg-gray-100 font-sans text-gray-800 md:flex-row">
       
       {/* sidebar reutilizado*/}
       <Sidebar />
 
       {/* Area central */}
-      <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto">
         
         {/* Boton de volver y drow menu */}
         <header className="bg-white border-b px-8 py-3 flex justify-between items-center">
@@ -54,7 +54,7 @@ return (
             {/* Formulario */}
             <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Área solicitante</label>
                   <select 
@@ -104,7 +104,7 @@ return (
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Fecha de inicio requerida</label>
                   <input 

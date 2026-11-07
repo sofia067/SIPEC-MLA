@@ -1,1 +1,42 @@
 @import "tailwindcss";
+
+@media (max-width: 767px) {
+  .app-shell {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .app-shell > div {
+    min-width: 0;
+  }
+
+  .app-shell header {
+    min-width: 0;
+    flex-wrap: wrap;
+    padding-inline: 1rem !important;
+  }
+
+  .app-shell main {
+    min-width: 0;
+    padding: 1rem !important;
+  }
+
+  .app-shell main .grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .app-shell main .app-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell main .grid > .col-span-2,
+  .app-shell main .grid > .col-span-3 {
+    grid-column: auto !important;
+  }
+
+  .app-shell table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}

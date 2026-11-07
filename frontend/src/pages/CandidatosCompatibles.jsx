@@ -84,10 +84,10 @@ export default function CandidatosCompatibles() {
   const candidatosFiltrados = candidatos.filter((candidato) => candidato.solicitud === solicitudFiltro);
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+    <div className="app-shell flex h-dvh flex-col bg-gray-100 font-sans text-gray-800 md:flex-row">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto">
         {/* Header */}
         <header className="bg-white border-b px-4 sm:px-8 py-3 flex justify-between items-center gap-3">
           <div className="flex flex-wrap items-center gap-2">

@@ -147,9 +147,9 @@ export default function PerfilPuestoDetalle() {
   ];
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+    <div className="app-shell flex h-dvh flex-col bg-gray-100 font-sans text-gray-800 md:flex-row">
       <Sidebar />
-      <div className="min-w-0 flex-1 flex flex-col overflow-y-auto">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto">
         <header className="flex items-center justify-between border-b bg-white px-4 py-3 sm:px-8">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-950">SIPEC-MLA</h1>

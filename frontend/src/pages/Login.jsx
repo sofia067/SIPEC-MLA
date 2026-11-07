@@ -41,13 +41,13 @@ function Login() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 items-center justify-center p-4">
-      <div className="flex bg-white rounded-xl shadow-2xl overflow-hidden max-w-4xl w-full border border-gray-200">
+    <div className="flex min-h-dvh items-center justify-center bg-gray-100 p-3 sm:p-4">
+      <div className="flex w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl sm:flex-row">
         
         
-        <div className="w-1/2 bg-blue-900 text-white p-10 flex flex-col justify-between items-center text-center">
+        <div className="flex flex-col items-center justify-between bg-blue-900 p-6 text-center text-white sm:w-1/2 sm:p-10">
           <div className="my-auto flex flex-col items-center">
-            <img src="/AquijesLogo.jpg" alt="Logo Los Aquijes" className="w-40 h-40 mb-4 object-contain bg-white/10 p-3 rounded-2xl shadow-inner" />
+            <img src="/AquijesLogo.jpg" alt="Logo Los Aquijes" className="mb-4 h-24 w-24 rounded-2xl bg-white/10 p-3 object-contain shadow-inner sm:h-40 sm:w-40" />
             <h1 className="text-3xl font-bold tracking-wide">SIPEC-MLA</h1>
             <p className="text-sm font-medium text-blue-200 mt-2">
               Sistema de Identificación y Perfilamiento de Competencias
@@ -59,7 +59,7 @@ function Login() {
         </div>
 
         
-        <div className="w-1/2 p-10 flex flex-col justify-center">
+        <div className="flex flex-col justify-center p-5 sm:w-1/2 sm:p-10">
           <h2 className="text-xl font-bold text-gray-800">Bienvenido a SIPEC-MLA</h2>
           <p className="text-xs text-gray-500 mb-4">Inicia sesión para continuar</p>
 
@@ -116,7 +116,7 @@ function Login() {
               </select>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <label className="flex items-center text-gray-600 cursor-pointer">
                 <input type="checkbox" className="mr-2 rounded border-gray-300 text-blue-800" />
                 Recordar sesión

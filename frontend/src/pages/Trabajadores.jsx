@@ -33,11 +33,11 @@ export default function Trabajadores() {
   );
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+    <div className="app-shell flex h-dvh flex-col bg-gray-100 font-sans text-gray-800 md:flex-row">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col overflow-y-auto">
-        <header className="bg-white border-b px-8 py-3 flex justify-between items-center">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto">
+        <header className="bg-white border-b px-4 py-3 flex justify-between items-center gap-3 sm:px-8">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-950">SIPEC-MLA</h1>
             <span className="text-xs bg-blue-100 text-blue-800 font-medium px-2.5 py-0.5 rounded-full">
@@ -51,7 +51,7 @@ export default function Trabajadores() {
           {error && (
             <div role="alert" className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</div>
           )}
-          <div className="flex justify-between items-center border-b pb-4">
+          <div className="flex flex-col justify-between gap-4 border-b pb-4 sm:flex-row sm:items-center">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Directorio de Trabajadores</h2>
               <p className="text-xs text-gray-500">Registro unificado del personal de la Municipalidad Distrital de Los Aquijes</p>
@@ -68,7 +68,7 @@ export default function Trabajadores() {
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+          <div className="overflow-x-auto bg-white p-4 rounded-xl border border-gray-200 shadow-sm sm:p-5">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="text-gray-400 border-b pb-2">

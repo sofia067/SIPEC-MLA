@@ -51,21 +51,21 @@ function Dashboard() {
     : 'Sin fecha';
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+    <div className="app-shell flex h-dvh flex-col bg-gray-100 font-sans text-gray-800 md:flex-row">
       
       <Sidebar />
 
       {/* Área Principal de Contenido */}
-      <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto">
         
         {/* Barra Superior */}
-        <header className="bg-white border-b px-12 py-3 flex justify-end items-center gap-4">
+        <header className="bg-white border-b px-4 py-3 flex justify-end items-center gap-4 sm:px-8">
           <UserDropdown />
          
         </header>
 
         {/* Contenido Central */}
-        <main className="p-8 space-y-6">
+        <main className="p-4 space-y-6 sm:p-8">
           
           
           <div>
@@ -80,7 +80,7 @@ function Dashboard() {
           )}
 
           {/* Tarjetas de Métricas (Números Centrados) */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="app-metric-grid grid grid-cols-2 gap-3 lg:grid-cols-4 sm:gap-4">
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 border-b-4 border-b-blue-900 flex flex-col items-center justify-center text-center">
               <div className="flex items-center justify-center gap-2 w-full mb-1">
                 <span className="p-1 bg-blue-50 text-blue-800 rounded-lg text-base ">📄</span>
@@ -116,10 +116,10 @@ function Dashboard() {
 
           {/* Sección Inferior */}
           {!esComite && (
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
             
             {/* Tabla de Solicitudes Recientes */}
-            <div className="col-span-2 bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 lg:col-span-2 sm:p-5">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-sm text-gray-800">Solicitudes recientes</h3>
                 {puedeSolicitudes && <Link to="/solicitudes-cobertura" className="text-xs text-blue-900 font-semibold hover:underline">Ver todas {'>'}</Link>}
