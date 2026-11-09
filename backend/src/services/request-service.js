@@ -7,8 +7,7 @@ export const requestService = {
     const areaName = getAreaScope(user);
     const normalizedInput = {
       ...input,
-      department: areaName || input.department,
-      department: input.department.trim(),
+      department: (areaName || input.department).trim(),
       positionTitle: input.positionTitle.trim(),
       reason: input.reason.trim(),
     };
@@ -16,25 +15,14 @@ export const requestService = {
     if (normalizedInput.requiredBy && normalizedInput.requiredBy < new Date().toISOString().slice(0, 10)) {
       throw new AppError(400, 'INVALID_REQUIRED_DATE', 'La fecha requerida no puede estar en el pasado.');
     }
+    if (normalizedInput.applicationDeadline <= new Date().toISOString().slice(0, 10)) {
+      throw new AppError(400, 'INVALID_APPLICATION_DEADLINE', 'La fecha de cierre debe ser posterior a hoy.');
+    }
 
     return requestRepository.create({ ...normalizedInput, userId: user.id });
   },
 
   async getDashboard(user) {
-    if (user.role === 'committee') {
-      return {
-        summary: {
-          pending_requests: 0,
-          pending_validations: 0,
-          pending_evaluations: 0,
-          completed_assignments: 0,
-          pending_documents: 0,
-          pending_technical_evaluations: 0,
-          expiring_requests: 0,
-        },
-        requests: [],
-      };
-    }
     const areaName = getAreaScope(user);
     const [summary, requests] = await Promise.all([
       requestRepository.getDashboardSummary(areaName),

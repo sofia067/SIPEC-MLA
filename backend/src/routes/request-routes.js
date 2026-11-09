@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authenticate.js';
 import { requestService } from '../services/request-service.js';
+import { applicationDocumentsSchema } from '../services/application-documents.js';
 import { getAreaScope } from '../middleware/role-scope.js';
 import { authorize } from '../middleware/authorize.js';
 
@@ -11,6 +12,8 @@ const requestSchema = z.object({
   reason: z.string().trim().min(10).max(4000),
   priority: z.enum(['Alta', 'Media', 'Baja']).default('Media'),
   requiredBy: z.union([z.literal(''), z.iso.date()]).optional().transform((value) => value || null),
+  applicationDeadline: z.iso.date(),
+  applicationDocuments: applicationDocumentsSchema.default([]),
 });
 
 export function createRequestRouter() {

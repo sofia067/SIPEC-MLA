@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import multer from 'multer';
 import { env } from '../config/env.js';
 import { AppError } from '../errors/app-error.js';
+import { APPLICATION_DOCUMENT_TYPES } from '../services/application-documents.js';
 
 export const uploadsDirectory = resolve(process.cwd(), env.UPLOADS_DIR);
 
@@ -22,13 +23,26 @@ export const uploadDocument = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 1 },
 }).single('file');
 
-export const uploadApplicationResume = multer({
+export const uploadPublicApplication = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 6 },
   fileFilter: (req, file, callback) => {
-    if (file.mimetype !== 'application/pdf' || extname(file.originalname).toLowerCase() !== '.pdf') {
-      return callback(new AppError(400, 'INVALID_RESUME_FORMAT', 'Adjunta el currículum en formato PDF.'));
+    const allowedFields = new Set([
+      'resume',
+      ...APPLICATION_DOCUMENT_TYPES.map(({ type }) => type),
+    ]);
+    if (!allowedFields.has(file.fieldname)
+      || file.mimetype !== 'application/pdf'
+      || extname(file.originalname).toLowerCase() !== '.pdf') {
+      return callback(new AppError(
+        400,
+        'INVALID_APPLICATION_DOCUMENT',
+        'Adjunta el currículum y los documentos solicitados en formato PDF.',
+      ));
     }
     return callback(null, true);
   },
-}).single('resume');
+}).fields([
+  { name: 'resume', maxCount: 1 },
+  ...APPLICATION_DOCUMENT_TYPES.map(({ type }) => ({ name: type, maxCount: 5 })),
+]);

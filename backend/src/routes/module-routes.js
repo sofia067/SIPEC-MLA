@@ -8,8 +8,14 @@ import { modulesRepository } from '../repositories/modules-repository.js';
 import { requestRepository } from '../repositories/request-repository.js';
 import { hashPassword } from '../security/password.js';
 import { documentService } from '../services/document-service.js';
-import { extractText } from '../services/ocr-service.js';
+import { extractPdfMetadata, extractText } from '../services/ocr-service.js';
+import { assessDocumentReview } from '../services/document-review.js';
 import { scoreResumeMatch } from '../services/match-scoring.js';
+import {
+  assessResumeTextQuality,
+  redactCandidateDocumentText,
+} from '../services/resume-review.js';
+import { applicationDocumentsSchema } from '../services/application-documents.js';
 import { getAreaScope } from '../middleware/role-scope.js';
 
 const idSchema = z.uuid();
@@ -53,15 +59,18 @@ const requestDetailsSchema = z.object({
   reason: z.string().trim().min(10).max(4000),
   priority: z.enum(['Alta', 'Media', 'Baja']).default('Media'),
   requiredBy: z.union([z.literal(''), z.iso.date()]).optional().transform((value) => value || null),
+  applicationDeadline: z.iso.date(),
+  applicationDocuments: applicationDocumentsSchema.default([]),
 });
 const documentSchema = z.object({
   requestId: z.union([z.literal(''), idSchema]).optional().default(''),
   workerId: z.union([z.literal(''), idSchema]).optional().default(''),
+  candidateId: z.union([z.literal(''), idSchema]).optional().default(''),
   documentType: nonEmptyText(120),
   description: z.string().trim().max(2000).default(''),
   status: z.enum(['pending', 'completed']).default('pending'),
-}).refine((data) => data.requestId || data.workerId, {
-  message: 'Vincula el documento a una solicitud o a un trabajador.',
+}).refine((data) => [data.requestId, data.workerId, data.candidateId].filter(Boolean).length === 1, {
+  message: 'Vincula el documento a un postulante, una solicitud o un trabajador.',
 });
 const evaluationSchema = z.object({
   requestId: z.union([z.literal(''), idSchema]).optional().default(''),
@@ -84,13 +93,13 @@ const assignmentSchema = z.object({
 const createUserSchema = z.object({
   username: nonEmptyText(80).toLowerCase(),
   displayName: nonEmptyText(160),
-  role: z.enum(['admin', 'hr_specialist', 'area_manager', 'committee']),
+  role: z.enum(['admin', 'hr_specialist', 'area_manager']),
   areaName: z.string().trim().max(160).default(''),
   password: z.string().min(12).max(256),
 });
 const updateUserSchema = z.object({
   displayName: nonEmptyText(160),
-  role: z.enum(['admin', 'hr_specialist', 'area_manager', 'committee']),
+  role: z.enum(['admin', 'hr_specialist', 'area_manager']),
   areaName: z.string().trim().max(160).default(''),
   password: z.union([z.literal(''), z.string().min(12).max(256)]).optional().default(''),
   isActive: z.boolean(),
@@ -110,7 +119,12 @@ const applicationSettingsSchema = z.object({
     laborRegimes: z.array(nonEmptyText(100)).max(100),
     contractTypes: z.array(nonEmptyText(100)).max(100),
     organizationalAreas: z.array(nonEmptyText(160)).max(200),
+    positionLevels: z.array(nonEmptyText(80)).max(100),
+    educationLevels: z.array(nonEmptyText(160)).max(100),
   }).optional(),
+});
+const applicationDeadlineSchema = z.object({
+  applicationDeadline: z.iso.date(),
 });
 const blindCandidateSchema = z.object({
   requestId: idSchema,
@@ -124,6 +138,38 @@ const blindExamSchema = z.object({
 });
 const blindExamReviewSchema = z.object({
   status: z.enum(['approved', 'rejected']),
+});
+const candidateProcessStageSchema = z.object({
+  processStage: z.enum([
+    'application_received',
+    'document_review',
+    'exam',
+    'interview',
+    'practical',
+    'final_result',
+  ]),
+  publicMessage: z.string().trim().max(500).default(''),
+  interviewDate: z.union([z.literal(''), z.iso.date()]).optional().default(''),
+  interviewTime: z.string().regex(/^\d{2}:\d{2}$/).or(z.literal('')).optional().default(''),
+  interviewModality: z.enum(['in_person', 'virtual']).or(z.literal('')).optional().default(''),
+  interviewLocation: z.string().trim().max(500).optional().default(''),
+}).refine((data) => {
+  const appointmentFields = [
+    data.interviewDate,
+    data.interviewTime,
+    data.interviewModality,
+    data.interviewLocation,
+  ];
+  const hasAppointmentData = appointmentFields.some(Boolean);
+  return !hasAppointmentData || (
+    data.processStage === 'interview' && appointmentFields.every(Boolean)
+  );
+}, {
+  message: 'Para programar la entrevista, completa fecha, hora, modalidad y lugar o enlace mientras la etapa sea entrevista.',
+});
+const simulatedCandidateNotificationSchema = z.object({
+  message: z.string().trim().min(1).max(1000),
+  confirmSimulation: z.boolean().default(false),
 });
 
 const requireId = (rawId) => {
@@ -177,7 +223,7 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/profiles', authorize('admin', 'hr_specialist', 'area_manager', 'committee'), async (req, res) => (
+  router.get('/profiles', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => (
     res.json({ profiles: await modulesRepository.listProfiles(getAreaScope(req.user)) })
   ));
   router.post('/profiles', authorize('admin', 'hr_specialist'), async (req, res) => {
@@ -197,10 +243,24 @@ export function createModuleRouter() {
   router.get('/requests', authorize('admin', 'hr_specialist', 'area_manager'), async (req, res) => (
     res.json({ requests: await requestRepository.listAll(getAreaScope(req.user)) })
   ));
+  router.patch('/requests/:id/deadline', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const { applicationDeadline } = applicationDeadlineSchema.parse(req.body);
+    if (applicationDeadline <= new Date().toISOString().slice(0, 10)) {
+      throw new AppError(400, 'INVALID_APPLICATION_DEADLINE', 'La nueva fecha de cierre debe ser posterior a hoy.');
+    }
+    const result = await findOr404(
+      () => requestRepository.extendApplicationDeadline(requireId(req.params.id), applicationDeadline, req.user.id),
+      'Solo se puede ampliar el plazo de una convocatoria aprobada con fecha de cierre vigente.',
+    );
+    res.json({ request: result });
+  });
   router.patch('/requests/:id', authorize('admin', 'hr_specialist'), async (req, res) => {
     const input = requestDetailsSchema.parse(req.body);
     if (input.requiredBy && input.requiredBy < new Date().toISOString().slice(0, 10)) {
       throw new AppError(400, 'INVALID_REQUIRED_DATE', 'La fecha requerida no puede estar en el pasado.');
+    }
+    if (input.applicationDeadline <= new Date().toISOString().slice(0, 10)) {
+      throw new AppError(400, 'INVALID_APPLICATION_DEADLINE', 'La fecha de cierre debe ser posterior a hoy.');
     }
     const result = await findOr404(
       () => requestRepository.updatePending(requireId(req.params.id), input, req.user.id),
@@ -227,7 +287,7 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/documents', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => (
+  router.get('/documents', authorize('admin', 'hr_specialist'), async (req, res) => (
     res.json({ documents: await modulesRepository.listWorkItems('documents') })
   ));
   router.post('/documents', authorize('admin', 'hr_specialist'), async (req, res) => {
@@ -257,11 +317,130 @@ export function createModuleRouter() {
     res.status(204).end();
   });
 
-  router.get('/blind-selection/banks', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
+  router.get('/blind-selection/banks', authorize('admin', 'hr_specialist'), async (req, res) => {
     res.json({ banks: modulesRepository.getBlindSelectionBanks() });
   });
-  router.get('/blind-selection/candidates', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
+  router.get('/blind-selection/candidates', authorize('admin', 'hr_specialist'), async (req, res) => {
     res.json({ candidates: await modulesRepository.listBlindSelectionCandidates(getAreaScope(req.user)) });
+  });
+  router.get('/blind-selection/simulated-notifications', authorize('admin', 'hr_specialist'), async (req, res) => {
+    res.json({
+      notifications: await modulesRepository.listSimulatedCandidateNotifications(getAreaScope(req.user)),
+    });
+  });
+  router.get('/blind-selection/candidate-document-options', authorize('admin', 'hr_specialist'), async (req, res) => {
+    res.json({
+      candidates: await modulesRepository.listBlindCandidateDocumentOptions(getAreaScope(req.user)),
+    });
+  });
+  router.get('/blind-selection/candidates/:id/resume-review', authorize('admin', 'hr_specialist'), async (req, res, next) => {
+    try {
+      const candidate = await modulesRepository.getBlindCandidateResumeReviewInput(
+        requireId(req.params.id),
+        getAreaScope(req.user),
+      );
+      if (!candidate) throw new AppError(404, 'CANDIDATE_NOT_FOUND', 'No se encontró al postulante.');
+      if (!candidate.resume_file_path) {
+        throw new AppError(404, 'RESUME_NOT_AVAILABLE', 'Este postulante no tiene un CV adjunto para revisar.');
+      }
+
+      let extractedText;
+      try {
+        extractedText = await extractText(candidate.resume_file_path, candidate.resume_file_mime);
+      } catch (error) {
+        console.error('No se pudo extraer texto para la revisión ciega del CV:', error);
+        throw new AppError(422, 'RESUME_EXTRACTION_FAILED', 'No se pudo leer el CV. Verifica el archivo e inténtalo nuevamente.');
+      }
+
+      let pdfMetadata = {};
+      try {
+        pdfMetadata = await extractPdfMetadata(candidate.resume_file_path);
+      } catch (error) {
+        console.error('No se pudieron leer los metadatos del CV:', error);
+        pdfMetadata = { metadataStatus: 'unavailable' };
+      }
+      const duplicates = await modulesRepository.findExactDuplicateCandidateResumeFiles(
+        candidate.id,
+        candidate.resume_file_sha256,
+      );
+      const findings = assessDocumentReview({
+        text: extractedText,
+        candidate,
+        duplicates,
+        pdfMetadata,
+      });
+      const { text, maskedItems, identityMismatch } = redactCandidateDocumentText(
+        extractedText,
+        candidate,
+        findings,
+      );
+      res.set('Cache-Control', 'no-store');
+      return res.json({
+        review: {
+          applicationCode: candidate.application_code,
+          fileSha256: candidate.resume_file_sha256,
+          identityRevealed: candidate.identity_revealed,
+          identityMismatch,
+          text,
+          quality: assessResumeTextQuality(extractedText),
+          maskedItems,
+          pdfMetadata,
+          findings,
+          reviewedAt: candidate.resume_reviewed_at,
+          reviewedByName: candidate.resume_reviewed_by_name,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.patch('/blind-selection/candidates/:id/resume-review', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const result = await modulesRepository.markBlindCandidateResumeReviewed(
+      requireId(req.params.id),
+      req.user.id,
+    );
+    if (!result) throw new AppError(404, 'RESUME_NOT_AVAILABLE', 'No se encontró el CV del postulante.');
+    res.json({
+      reviewedAt: result.resume_reviewed_at,
+      reviewedByName: req.user.displayName,
+    });
+  });
+  router.patch('/blind-selection/candidates/:id/stage', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const { processStage, publicMessage, interviewDate, interviewTime, interviewModality, interviewLocation } =
+      candidateProcessStageSchema.parse(req.body);
+    if (interviewDate && interviewTime) {
+      const interviewAt = new Date(`${interviewDate}T${interviewTime}:00-05:00`);
+      if (interviewAt <= new Date()) {
+        throw new AppError(400, 'INVALID_INTERVIEW_DATE', 'La fecha y hora de la entrevista deben ser futuras.');
+      }
+    }
+    const candidate = await findOr404(
+      () => modulesRepository.updateBlindCandidateStage(
+        requireId(req.params.id),
+        processStage,
+        publicMessage,
+        req.user.id,
+        interviewDate && interviewTime
+          ? { interviewDate, interviewTime, interviewModality, interviewLocation }
+          : null,
+      ),
+      'No se encontró al postulante.',
+    );
+    res.json({ candidate });
+  });
+  router.post('/blind-selection/candidates/:id/simulated-notifications', authorize('admin', 'hr_specialist'), async (req, res) => {
+    const { message, confirmSimulation } = simulatedCandidateNotificationSchema.parse(req.body);
+    if (!confirmSimulation) {
+      throw new AppError(400, 'SIMULATION_CONFIRMATION_REQUIRED', 'Confirma que registrarás solo una simulación; no se enviará un WhatsApp real.');
+    }
+    const notification = await modulesRepository.createSimulatedCandidateNotification(
+      requireId(req.params.id),
+      message,
+      req.user.id,
+      getAreaScope(req.user),
+    );
+    if (!notification) throw new AppError(404, 'CANDIDATE_NOT_FOUND', 'No se encontró al postulante.');
+    res.status(201).json({ notification });
   });
   router.post('/blind-selection/candidates/:id/match', authorize('admin', 'hr_specialist'), async (req, res, next) => {
     try {
@@ -303,7 +482,7 @@ export function createModuleRouter() {
     const candidate = await modulesRepository.createBlindSelectionCandidate(input, req.user.id);
     res.status(201).json({ candidate });
   });
-  router.post('/blind-selection/candidates/:id/exam', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
+  router.post('/blind-selection/candidates/:id/exam', authorize('admin', 'hr_specialist'), async (req, res) => {
     const { answers } = blindExamSchema.parse(req.body);
     const exam = await modulesRepository.submitBlindSelectionExam(
       requireId(req.params.id),
@@ -312,14 +491,14 @@ export function createModuleRouter() {
     );
     res.status(201).json({ exam });
   });
-  router.get('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
+  router.get('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist'), async (req, res) => {
     const exam = await findOr404(
       () => modulesRepository.getBlindSelectionExamForReview(requireId(req.params.id)),
       'No se encontró un examen para revisar.',
     );
     res.json({ exam });
   });
-  router.patch('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
+  router.patch('/blind-selection/candidates/:id/review', authorize('admin', 'hr_specialist'), async (req, res) => {
     const { status } = blindExamReviewSchema.parse(req.body);
     const result = await modulesRepository.reviewBlindSelectionExam(
       requireId(req.params.id),
@@ -333,7 +512,7 @@ export function createModuleRouter() {
     const document = await documentService.attachFile(req.params.id, req.file, req.user.id);
     res.status(202).json({ document });
   });
-  router.get('/documents/:id/file', authorize('admin', 'hr_specialist', 'committee'), async (req, res) => {
+  router.get('/documents/:id/file', authorize('admin', 'hr_specialist'), async (req, res) => {
     const file = await findOr404(
       () => modulesRepository.getDocumentFile(requireId(req.params.id)),
       'El documento no tiene archivo adjunto.',

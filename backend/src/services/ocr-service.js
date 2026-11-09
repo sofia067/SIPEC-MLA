@@ -71,6 +71,25 @@ async function extractFromPdf(filePath) {
   }
 }
 
+export async function extractPdfMetadata(filePath) {
+  const buffer = await readFile(filePath);
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const result = await parser.getInfo();
+    const dates = result.getDateNode() ?? {};
+    const toIsoString = (value) => (
+      value instanceof Date && !Number.isNaN(value.getTime()) ? value.toISOString() : null
+    );
+    return {
+      metadataStatus: 'read',
+      creationDate: toIsoString(dates.CreationDate ?? dates.XmpCreateDate ?? dates.XapCreateDate),
+      modificationDate: toIsoString(dates.ModDate ?? dates.XmpModifyDate ?? dates.XapModifyDate),
+    };
+  } finally {
+    await parser.destroy();
+  }
+}
+
 export function extractText(filePath, mime) {
   const task = queue.then(async () => {
     if (mime === 'application/pdf') return extractFromPdf(filePath);

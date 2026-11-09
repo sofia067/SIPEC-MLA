@@ -3,6 +3,7 @@ import { AppError } from '../errors/app-error.js';
 import { EVALUATION_BANKS } from '../data/evaluation-banks.js';
 import { getRequestIpAddress } from '../middleware/request-context.js';
 import { getAreaScope } from '../middleware/role-scope.js';
+import { redactCandidateDocumentText } from '../services/resume-review.js';
 
 const workerSelect = `
   SELECT w.id, w.employee_number, w.document_number, w.full_name, w.email, w.phone,
@@ -17,7 +18,7 @@ const workerSelect = `
 const profileSelect = `
   SELECT p.id, p.title, p.description, p.level, p.principal_requirements,
          p.profile_code, p.remuneration, p.education, p.general_experience,
-         p.specific_experience, array_to_string(p.technical_knowledge, E'\n') AS technical_knowledge,
+         p.specific_experience, p.technical_knowledge,
          p.functions,
          p.status, p.created_at, p.updated_at,
          d.id AS department_id, d.name AS department,
@@ -61,7 +62,7 @@ async function withTransaction(action) {
 
 export const modulesRepository = {
   async getLookups(areaName = null) {
-    const [departments, profiles, workers, requests] = await Promise.all([
+    const [departments, profiles, workers, requests, settings] = await Promise.all([
       pool.query('SELECT id, name FROM departments WHERE ($1::text IS NULL OR lower(name) = lower($1)) ORDER BY name', [areaName]),
       pool.query(
         `SELECT p.id, p.title, d.name AS department
@@ -74,9 +75,23 @@ export const modulesRepository = {
                   WHERE w.status = 'active' AND ($1::text IS NULL OR lower(d.name) = lower($1)) ORDER BY w.full_name`, [areaName]),
       pool.query(`SELECT r.id, r.code FROM coverage_requests r JOIN departments d ON d.id = r.department_id
                   WHERE ($1::text IS NULL OR lower(d.name) = lower($1)) ORDER BY r.created_at DESC LIMIT 500`, [areaName]),
+      pool.query('SELECT catalog_data FROM application_settings WHERE id = 1'),
     ]);
+    const catalogData = settings.rows[0]?.catalog_data ?? {};
+    const configuredAreas = Array.isArray(catalogData.organizationalAreas) ? catalogData.organizationalAreas : [];
+    const departmentNames = departments.rows.map(({ name }) => name);
+    const areaSource = configuredAreas.length ? configuredAreas : departmentNames;
+    const uniqueAreas = new Map(areaSource.map((name) => [name.toLocaleLowerCase(), name]));
+    const departmentIds = new Map(departments.rows.map(({ id, name }) => [name.toLocaleLowerCase(), id]));
+    const areaNames = [...uniqueAreas.values()]
+      .filter((name) => !areaName || name.toLocaleLowerCase() === areaName.toLocaleLowerCase())
+      .sort((left, right) => left.localeCompare(right, 'es'));
     return {
-      departments: departments.rows,
+      departments: areaNames.map((name) => ({ id: departmentIds.get(name.toLocaleLowerCase()) ?? null, name })),
+      catalogData: {
+        positionLevels: catalogData.positionLevels ?? [],
+        educationLevels: catalogData.educationLevels ?? [],
+      },
       profiles: profiles.rows,
       workers: workers.rows,
       requests: requests.rows,
@@ -228,25 +243,73 @@ export const modulesRepository = {
   },
 
   async listWorkItems(type) {
-    const result = await pool.query(
-      type === 'documents'
-        ? `SELECT d.id, d.document_type, d.description, d.status::text AS status, d.created_at,
+    const query = type === 'documents'
+      ? `SELECT d.id, d.document_type, d.description, d.status::text AS status, d.created_at,
+                  d.validated_at, d.validated_by,
                   d.request_id, r.code AS request_code, d.worker_id, w.full_name AS worker_name,
+                  d.candidate_id, bc.application_code AS candidate_code,
+                  (bc.identity_revealed_at IS NOT NULL) AS candidate_identity_revealed,
+                  bc.full_name AS candidate_full_name, bc.document_number AS candidate_document_number,
+                  bc.email AS candidate_email, bc.phone AS candidate_phone,
                   d.file_name, d.file_mime, d.file_size, d.file_sha256, d.ocr_status, d.ocr_text, d.ocr_message,
-                  d.ocr_processed_at,
+                  d.ocr_processed_at, d.file_metadata, d.review_findings,
                   (d.file_path IS NOT NULL) AS has_file
            FROM document_validations d
            LEFT JOIN coverage_requests r ON r.id = d.request_id
            LEFT JOIN workers w ON w.id = d.worker_id
+           LEFT JOIN blind_candidates bc ON bc.id = d.candidate_id
            ORDER BY d.created_at DESC`
-        : `SELECT e.id, e.evaluation_name, e.candidate_name, e.notes, e.score,
+      : `SELECT e.id, e.evaluation_name, e.candidate_name, e.notes, e.score,
                   e.status::text AS status, e.created_at, e.request_id, r.code AS request_code,
                   e.worker_id, w.full_name AS worker_name
            FROM technical_evaluations e
            LEFT JOIN coverage_requests r ON r.id = e.request_id
            LEFT JOIN workers w ON w.id = e.worker_id
-           ORDER BY e.created_at DESC`,
-    );
+           ORDER BY e.created_at DESC`;
+    const result = await pool.query(query);
+    if (type === 'documents') {
+      return result.rows.map((row) => {
+        const {
+          candidate_full_name: fullName,
+          candidate_document_number: documentNumber,
+          candidate_email: email,
+          candidate_phone: phone,
+          candidate_identity_revealed: identityRevealed,
+          ...document
+        } = row;
+        if (document.candidate_id && identityRevealed) {
+          return { ...document, candidate_identity_revealed: true };
+        }
+
+        if (document.candidate_id) {
+          const blindText = redactCandidateDocumentText(document.ocr_text, {
+            full_name: fullName,
+            document_number: documentNumber,
+            email,
+            phone,
+          }, document.review_findings);
+          return {
+            ...document,
+            candidate_identity_revealed: false,
+            description: '',
+            file_name: document.document_type || 'Documento de postulante',
+            ocr_text: blindText.text,
+            blind_review_identity_mismatch: blindText.identityMismatch,
+          };
+        }
+
+        if (document.request_id && !document.worker_id) {
+          return {
+            ...document,
+            file_name: document.document_type || 'Documento vinculado a solicitud',
+            ocr_text: null,
+            blind_review_requires_candidate_link: true,
+          };
+        }
+
+        return document;
+      });
+    }
     return result.rows;
   },
 
@@ -255,12 +318,13 @@ export const modulesRepository = {
       const result = type === 'documents'
         ? await client.query(
           `INSERT INTO document_validations
-             (request_id, worker_id, document_type, description, status, validated_by, validated_at)
-             VALUES ($1, $2, $3, $4, $5::work_item_status, $6,
-               CASE WHEN $5::work_item_status = 'completed' THEN now() ELSE NULL END)
+             (request_id, worker_id, candidate_id, document_type, description, status, validated_by, validated_at)
+             VALUES ($1, $2, $3, $4, $5, $6::work_item_status, $7,
+               CASE WHEN $6::work_item_status = 'completed' THEN now() ELSE NULL END)
            RETURNING *`,
-          [input.requestId || null, input.workerId || null, input.documentType, input.description,
-            input.status, input.status === 'completed' ? actorId : null],
+          [input.requestId || null, input.workerId || null, input.candidateId || null,
+            input.documentType, input.description, input.status,
+            input.status === 'completed' ? actorId : null],
         )
         : await client.query(
           `INSERT INTO technical_evaluations
@@ -281,9 +345,13 @@ export const modulesRepository = {
   async updateWorkItem(type, id, input, actorId) {
     const table = type === 'documents' ? 'document_validations' : 'technical_evaluations';
     const statement = type === 'documents'
-      ? `UPDATE document_validations SET request_id = $2, worker_id = $3, document_type = $4,
-           description = $5, status = $6::work_item_status, validated_by = $7,
-           validated_at = CASE WHEN $6::work_item_status = 'completed' THEN now() ELSE NULL END
+      ? `UPDATE document_validations SET request_id = $2, worker_id = $3, candidate_id = $4, document_type = $5,
+           description = $6, status = $7::work_item_status,
+           validated_by = CASE WHEN $7::work_item_status = 'completed' THEN COALESCE(validated_by, $8) ELSE NULL END,
+           validated_at = CASE
+             WHEN $7::work_item_status = 'completed' THEN COALESCE(validated_at, now())
+             ELSE NULL
+           END
          WHERE id = $1 RETURNING *`
       : `UPDATE technical_evaluations SET request_id = $2, worker_id = $3, evaluation_name = $4,
            candidate_name = $5, notes = $6, score = $7, status = $8::work_item_status,
@@ -291,8 +359,9 @@ export const modulesRepository = {
            evaluated_at = CASE WHEN $8::work_item_status = 'completed' THEN now() ELSE NULL END
          WHERE id = $1 RETURNING *`;
     const values = type === 'documents'
-      ? [id, input.requestId || null, input.workerId || null, input.documentType,
-        input.description, input.status, input.status === 'completed' ? actorId : null]
+      ? [id, input.requestId || null, input.workerId || null, input.candidateId || null,
+        input.documentType, input.description, input.status,
+        input.status === 'completed' ? actorId : null]
       : [id, input.requestId || null, input.workerId || null, input.evaluationName,
         input.candidateName || null, input.notes, input.score ?? null, input.status,
         input.status === 'completed' ? actorId : null];
@@ -316,9 +385,77 @@ export const modulesRepository = {
 
   async getDocumentFile(id) {
     const result = await pool.query(
-      `      SELECT id, file_name, file_path, file_mime, file_sha256, ocr_status
-       FROM document_validations WHERE id = $1`,
+      `SELECT d.id, d.file_name, d.file_path, d.file_mime
+       FROM document_validations d
+       WHERE d.id = $1`,
       [id],
+    );
+    return result.rows[0] ?? null;
+  },
+
+  async listBlindCandidateDocumentOptions(areaName = null) {
+    const result = await pool.query(
+      `SELECT c.id, c.application_code, r.code AS request_code, p.title AS position_title
+       FROM blind_candidates c
+       JOIN coverage_requests r ON r.id = c.request_id
+       JOIN departments d ON d.id = r.department_id
+       JOIN position_profiles p ON p.id = r.position_id
+       WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
+       ORDER BY c.created_at DESC`,
+      [areaName],
+    );
+    return result.rows;
+  },
+
+  async getDocumentReviewInput(documentId) {
+    const result = await pool.query(
+      `SELECT d.id, d.file_sha256, d.file_mime, d.candidate_id,
+              c.application_code, c.full_name, c.document_number
+       FROM document_validations d
+       LEFT JOIN blind_candidates c ON c.id = d.candidate_id
+       WHERE d.id = $1`,
+      [documentId],
+    );
+    return result.rows[0] ?? null;
+  },
+
+  async findExactDuplicateCandidateDocuments(documentId, fileSha256) {
+    if (!fileSha256) return [];
+    const result = await pool.query(
+      `WITH current AS (
+         SELECT candidate_id FROM document_validations WHERE id = $1
+       ), duplicates AS (
+         SELECT c.application_code, d.document_type
+         FROM document_validations d
+         JOIN blind_candidates c ON c.id = d.candidate_id
+         CROSS JOIN current
+         WHERE d.id <> $1 AND d.file_sha256 = $2
+           AND d.candidate_id <> current.candidate_id
+         UNION
+         SELECT c.application_code, 'Currículum' AS document_type
+         FROM blind_candidates c, current
+         WHERE c.resume_file_sha256 = $2
+           AND c.id <> current.candidate_id
+       )
+       SELECT application_code, document_type
+       FROM duplicates
+       ORDER BY application_code, document_type
+       LIMIT 20`,
+      [documentId, fileSha256],
+    );
+    return result.rows.map((row) => ({
+      applicationCode: row.application_code,
+      documentType: row.document_type,
+    }));
+  },
+
+  async setDocumentReviewResult(id, fileMetadata, reviewFindings) {
+    const result = await pool.query(
+      `UPDATE document_validations
+       SET file_metadata = $2, review_findings = $3
+       WHERE id = $1
+       RETURNING id`,
+      [id, JSON.stringify(fileMetadata), JSON.stringify(reviewFindings)],
     );
     return result.rows[0] ?? null;
   },
@@ -329,7 +466,8 @@ export const modulesRepository = {
         `UPDATE document_validations
          SET file_name = $2, file_path = $3, file_mime = $4, file_size = $5,
              file_sha256 = $6, ocr_status = 'processing', ocr_text = NULL,
-             ocr_message = NULL, ocr_processed_at = NULL
+             ocr_message = NULL, ocr_processed_at = NULL,
+             file_metadata = '{}'::jsonb, review_findings = '[]'::jsonb
          WHERE id = $1
          RETURNING id, document_type, status::text AS status, file_name, file_mime,
                    file_size, file_sha256, ocr_status`,
@@ -345,10 +483,10 @@ export const modulesRepository = {
     const result = await pool.query(
       `UPDATE document_validations
        SET ocr_status = $2, ocr_text = $3, ocr_message = $4,
-           ocr_processed_at = CASE WHEN $2 = 'processing' THEN NULL ELSE now() END
+           ocr_processed_at = CASE WHEN $5 THEN NULL ELSE now() END
        WHERE id = $1
        RETURNING id, ocr_status, ocr_processed_at`,
-      [id, status, text, message],
+      [id, status, text, message, status === 'processing'],
     );
     return result.rows[0] ?? null;
   },
@@ -525,7 +663,15 @@ export const modulesRepository = {
   async listBlindSelectionCandidates(areaName = null) {
     const result = await pool.query(
       `SELECT c.id, c.application_code, c.request_id, r.code AS request_code,
+              d.name AS department, r.reason,
+              CASE r.priority::text
+                WHEN 'high' THEN 'Alta'
+                WHEN 'medium' THEN 'Media'
+                WHEN 'low' THEN 'Baja'
+              END AS priority,
               p.title AS position_title, c.is_demo, (c.resume_file_path IS NOT NULL) AS has_resume,
+              c.process_stage, c.process_stage_updated_at,
+              c.resume_reviewed_at, reviewer.display_name AS resume_reviewed_by_name,
               c.match_score, c.match_status, c.match_breakdown, c.match_calculated_at,
               e.objective_score, e.written_review_status,
               e.submitted_at, e.id AS exam_id,
@@ -539,6 +685,7 @@ export const modulesRepository = {
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
        LEFT JOIN blind_candidate_exams e ON e.candidate_id = c.id
+       LEFT JOIN users reviewer ON reviewer.id = c.resume_reviewed_by
        WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
        ORDER BY c.created_at DESC`,
       [areaName],
@@ -546,9 +693,157 @@ export const modulesRepository = {
     return result.rows;
   },
 
+  async listSimulatedCandidateNotifications(areaName = null) {
+    const result = await pool.query(
+      `SELECT n.id, n.candidate_id, c.application_code, p.title AS position_title,
+              n.channel, n.message, n.status, n.created_at,
+              sender.display_name AS sender_name
+       FROM blind_candidate_notifications n
+       JOIN blind_candidates c ON c.id = n.candidate_id
+       JOIN coverage_requests r ON r.id = c.request_id
+       JOIN departments d ON d.id = r.department_id
+       JOIN position_profiles p ON p.id = r.position_id
+       LEFT JOIN users sender ON sender.id = n.created_by
+       WHERE ($1::text IS NULL OR lower(d.name) = lower($1))
+       ORDER BY n.created_at DESC
+       LIMIT 100`,
+      [areaName],
+    );
+    return result.rows;
+  },
+
+  async createSimulatedCandidateNotification(candidateId, message, actorId, areaName = null) {
+    return withTransaction(async (client) => {
+      const candidate = await client.query(
+        `SELECT c.application_code, p.title AS position_title
+         FROM blind_candidates c
+         JOIN coverage_requests r ON r.id = c.request_id
+         JOIN departments d ON d.id = r.department_id
+         JOIN position_profiles p ON p.id = r.position_id
+         WHERE c.id = $1 AND ($2::text IS NULL OR lower(d.name) = lower($2))`,
+        [candidateId, areaName],
+      );
+      if (!candidate.rowCount) return null;
+
+      const notification = await client.query(
+        `INSERT INTO blind_candidate_notifications (candidate_id, message, created_by)
+         VALUES ($1, $2, $3)
+         RETURNING id, candidate_id, channel, message, status, created_at`,
+        [candidateId, message, actorId],
+      );
+      const saved = notification.rows[0];
+      await recordAudit(client, actorId, 'blind_candidate.notification_simulated', 'blind_candidate',
+        candidateId, {
+          applicationCode: candidate.rows[0].application_code,
+          channel: saved.channel,
+          status: saved.status,
+        });
+      return {
+        ...saved,
+        application_code: candidate.rows[0].application_code,
+        position_title: candidate.rows[0].position_title,
+      };
+    });
+  },
+
+  async updateBlindCandidateStage(candidateId, processStage, publicMessage, actorId, appointment = null) {
+    return withTransaction(async (client) => {
+      const current = await client.query(
+        `SELECT process_stage
+         FROM blind_candidates
+         WHERE id = $1
+         FOR UPDATE`,
+        [candidateId],
+      );
+      if (!current.rowCount) return null;
+      const previousStage = current.rows[0].process_stage;
+      if (previousStage === processStage && !publicMessage && !appointment) {
+        throw new AppError(409, 'PROCESS_STAGE_UNCHANGED', 'El postulante ya se encuentra en esa etapa.');
+      }
+
+      const updated = previousStage === processStage
+        ? await client.query(
+          `SELECT process_stage, process_stage_updated_at
+           FROM blind_candidates
+           WHERE id = $1`,
+          [candidateId],
+        )
+        : await client.query(
+          `UPDATE blind_candidates
+           SET process_stage = $2, process_stage_updated_at = now()
+           WHERE id = $1
+           RETURNING process_stage, process_stage_updated_at`,
+          [candidateId, processStage],
+        );
+      await client.query(
+        `INSERT INTO blind_candidate_process_history
+           (candidate_id, previous_stage, process_stage, public_message, updated_by,
+            interview_at, interview_modality, interview_location)
+         VALUES ($1, $2, $3, $4, $5,
+                 CASE WHEN $6::date IS NOT NULL AND $7::time IS NOT NULL
+                   THEN ($6::date + $7::time) AT TIME ZONE 'America/Lima'
+                 END,
+                 $8, $9)`,
+        [candidateId, previousStage, processStage, publicMessage, actorId,
+          appointment?.interviewDate ?? null, appointment?.interviewTime ?? null,
+          appointment?.interviewModality ?? null, appointment?.interviewLocation ?? null],
+      );
+      const eventType = previousStage !== processStage
+        ? 'blind_candidate.process_stage_changed'
+        : appointment
+          ? 'blind_candidate.interview_scheduled'
+          : 'blind_candidate.process_message_added';
+      await recordAudit(client, actorId,
+        eventType,
+        'blind_candidate', candidateId, {
+          previousStage,
+          processStage,
+          ...(appointment ? {
+            interviewDate: appointment.interviewDate,
+            interviewTime: appointment.interviewTime,
+            interviewModality: appointment.interviewModality,
+          } : {}),
+        });
+      return updated.rows[0];
+    });
+  },
+
+  async getPublicApplicationProgress(applicationCode, documentNumber) {
+    const result = await pool.query(
+      `SELECT c.id, c.application_code, r.code AS request_code,
+              p.title AS position_title, c.process_stage,
+              c.process_stage_updated_at, c.created_at
+       FROM blind_candidates c
+       JOIN coverage_requests r ON r.id = c.request_id
+       JOIN position_profiles p ON p.id = r.position_id
+       WHERE upper(c.application_code) = $1 AND c.document_number = $2`,
+      [applicationCode, documentNumber],
+    );
+    if (!result.rowCount) return null;
+    const candidate = result.rows[0];
+    const history = await pool.query(
+      `SELECT process_stage, public_message, created_at,
+              interview_at, interview_modality, interview_location
+       FROM blind_candidate_process_history
+       WHERE candidate_id = $1
+       ORDER BY created_at, id`,
+      [candidate.id],
+    );
+    return {
+      applicationCode: candidate.application_code,
+      requestCode: candidate.request_code,
+      positionTitle: candidate.position_title,
+      processStage: candidate.process_stage,
+      processStageUpdatedAt: candidate.process_stage_updated_at,
+      submittedAt: candidate.created_at,
+      history: history.rows,
+    };
+  },
+
   async getPublicMatchCriteria(requestId) {
     const result = await pool.query(
-      `SELECT p.education, p.general_experience, p.specific_experience,
+      `SELECT r.application_documents,
+              p.education, p.general_experience, p.specific_experience,
               p.technical_knowledge, p.principal_requirements,
               coalesce(json_agg(json_build_object('name', c.name, 'description', c.description))
                 FILTER (WHERE c.id IS NOT NULL), '[]'::json) AS competencies
@@ -556,7 +851,8 @@ export const modulesRepository = {
        JOIN position_profiles p ON p.id = r.position_id
        LEFT JOIN position_competencies c ON c.position_id = p.id
        WHERE r.id = $1 AND r.status = 'approved'
-       GROUP BY p.id`,
+         AND r.application_deadline >= CURRENT_DATE
+       GROUP BY p.id, r.application_documents`,
       [requestId],
     );
     return result.rows[0] ?? null;
@@ -578,6 +874,63 @@ export const modulesRepository = {
       [candidateId],
     );
     return result.rows[0] ?? null;
+  },
+
+  async getBlindCandidateResumeReviewInput(candidateId, areaName = null) {
+    const result = await pool.query(
+      `SELECT c.id, c.application_code, c.full_name, c.document_number, c.email, c.phone,
+              c.resume_file_name, c.resume_file_path, c.resume_file_mime, c.resume_file_sha256,
+              (c.identity_revealed_at IS NOT NULL) AS identity_revealed,
+              c.resume_reviewed_at,
+              reviewer.display_name AS resume_reviewed_by_name
+       FROM blind_candidates c
+       JOIN coverage_requests r ON r.id = c.request_id
+       JOIN departments d ON d.id = r.department_id
+       LEFT JOIN users reviewer ON reviewer.id = c.resume_reviewed_by
+       WHERE c.id = $1 AND ($2::text IS NULL OR lower(d.name) = lower($2))`,
+      [candidateId, areaName],
+    );
+    return result.rows[0] ?? null;
+  },
+
+  async findExactDuplicateCandidateResumeFiles(candidateId, fileSha256) {
+    if (!fileSha256) return [];
+    const result = await pool.query(
+      `SELECT application_code, document_type
+       FROM (
+         SELECT c.application_code, d.document_type
+         FROM document_validations d
+         JOIN blind_candidates c ON c.id = d.candidate_id
+         WHERE d.file_sha256 = $2 AND c.id <> $1
+         UNION
+         SELECT c.application_code, 'Currículum' AS document_type
+         FROM blind_candidates c
+         WHERE c.resume_file_sha256 = $2 AND c.id <> $1
+       ) AS duplicates
+       ORDER BY application_code, document_type
+       LIMIT 20`,
+      [candidateId, fileSha256],
+    );
+    return result.rows.map((row) => ({
+      applicationCode: row.application_code,
+      documentType: row.document_type,
+    }));
+  },
+
+  async markBlindCandidateResumeReviewed(candidateId, actorId) {
+    return withTransaction(async (client) => {
+      const result = await client.query(
+        `UPDATE blind_candidates
+         SET resume_reviewed_at = now(), resume_reviewed_by = $2
+         WHERE id = $1 AND resume_file_path IS NOT NULL
+         RETURNING id, application_code, resume_reviewed_at`,
+        [candidateId, actorId],
+      );
+      if (!result.rowCount) return null;
+      await recordAudit(client, actorId, 'blind_candidate.resume_reviewed', 'blind_candidate',
+        candidateId, { applicationCode: result.rows[0].application_code });
+      return result.rows[0];
+    });
   },
 
   async updateBlindCandidateMatch(candidateId, matchResult, actorId) {
@@ -659,18 +1012,25 @@ export const modulesRepository = {
         [applicationCode, input.requestId, input.fullName, input.documentNumber,
           input.email || null, input.phone || null, actorId],
       );
+      await client.query(
+        `INSERT INTO blind_candidate_process_history
+           (candidate_id, process_stage, updated_by, created_at)
+         VALUES ($1, 'application_received', $2, now())`,
+        [candidate.rows[0].id, actorId],
+      );
       await recordAudit(client, actorId, 'blind_candidate.created', 'blind_candidate',
         candidate.rows[0].id, { applicationCode, requestCode: request.rows[0].code });
       return candidate.rows[0];
     });
   },
 
-  async createPublicDemoApplication(input, resume, matchResult) {
+  async createPublicDemoApplication(input, resume, documents, matchResult) {
     return withTransaction(async (client) => {
       const request = await client.query(
         `SELECT r.id, r.code
          FROM coverage_requests r
          WHERE r.id = $1 AND r.status = 'approved'
+           AND r.application_deadline >= CURRENT_DATE
          FOR SHARE`,
         [input.requestId],
       );
@@ -695,21 +1055,41 @@ export const modulesRepository = {
           JSON.stringify(matchResult.breakdown),
           matchResult.status === 'calculated' ? new Date() : null],
       );
+      const savedDocuments = [];
+      for (const document of documents) {
+        const savedDocument = await client.query(
+          `INSERT INTO document_validations
+             (candidate_id, document_type, description, status, file_name, file_path,
+              file_mime, file_size, file_sha256)
+           VALUES ($1, $2, '', 'pending', $3, $4, 'application/pdf', $5, $6)
+           RETURNING id, file_path`,
+          [candidate.rows[0].id, document.label, document.fileName, document.filePath,
+            document.fileSize, document.fileSha256],
+        );
+        savedDocuments.push(savedDocument.rows[0]);
+      }
+      await client.query(
+        `INSERT INTO blind_candidate_process_history
+           (candidate_id, process_stage, public_message, created_at)
+         VALUES ($1, 'application_received', 'Recibimos tu postulación.', now())`,
+        [candidate.rows[0].id],
+      );
       await recordAudit(client, null, 'blind_candidate.demo_submitted', 'blind_candidate',
         candidate.rows[0].id, {
           applicationCode,
           requestCode: request.rows[0].code,
           matchScore: matchResult.score,
           matchStatus: matchResult.status,
+          attachedDocumentCount: savedDocuments.length,
         });
-      return candidate.rows[0];
+      return { ...candidate.rows[0], documents: savedDocuments };
     });
   },
 
   async submitBlindSelectionExam(candidateId, answers, actorId) {
     return withTransaction(async (client) => {
       const candidateResult = await client.query(
-        `SELECT c.id, c.application_code, p.title AS position_title
+        `SELECT c.id, c.application_code, c.process_stage, p.title AS position_title
          FROM blind_candidates c
          JOIN coverage_requests r ON r.id = c.request_id
          JOIN position_profiles p ON p.id = r.position_id
@@ -767,6 +1147,20 @@ export const modulesRepository = {
          RETURNING id, objective_score, written_review_status, submitted_at`,
         [candidateId, JSON.stringify(objectiveAnswers), JSON.stringify(writtenAnswers), objectiveScore],
       );
+      if (candidate.process_stage !== 'exam') {
+        await client.query(
+          `UPDATE blind_candidates
+           SET process_stage = 'exam', process_stage_updated_at = now()
+           WHERE id = $1`,
+          [candidateId],
+        );
+        await client.query(
+          `INSERT INTO blind_candidate_process_history
+             (candidate_id, previous_stage, process_stage, public_message, updated_by)
+           VALUES ($1, $2, 'exam', 'El examen fue presentado.', $3)`,
+          [candidateId, candidate.process_stage, actorId],
+        );
+      }
       await recordAudit(client, actorId, 'blind_candidate.exam_submitted', 'blind_candidate',
         candidateId, { applicationCode: candidate.application_code, objectiveScore });
       return { ...exam.rows[0], application_code: candidate.application_code, position_title: candidate.position_title };
@@ -776,7 +1170,8 @@ export const modulesRepository = {
   async reviewBlindSelectionExam(candidateId, status, actorId) {
     return withTransaction(async (client) => {
       const result = await client.query(
-        `SELECT e.objective_score, e.written_review_status, c.application_code, c.identity_revealed_at
+        `SELECT e.objective_score, e.written_review_status, c.application_code,
+                c.identity_revealed_at, c.process_stage
          FROM blind_candidate_exams e
          JOIN blind_candidates c ON c.id = e.candidate_id
          WHERE c.id = $1
@@ -798,6 +1193,27 @@ export const modulesRepository = {
          WHERE candidate_id = $1`,
         [candidateId, status, actorId],
       );
+      const previousStage = exam.process_stage;
+      const nextStage = status === 'approved'
+        ? ['application_received', 'document_review', 'exam'].includes(previousStage) ? 'interview' : previousStage
+        : 'final_result';
+      const stageMessage = status === 'approved'
+        ? 'El postulante superó la etapa de examen.'
+        : 'El postulante no continúa a la siguiente etapa.';
+      if (previousStage !== nextStage) {
+        await client.query(
+          `UPDATE blind_candidates
+           SET process_stage = $2, process_stage_updated_at = now()
+           WHERE id = $1`,
+          [candidateId, nextStage],
+        );
+        await client.query(
+          `INSERT INTO blind_candidate_process_history
+             (candidate_id, previous_stage, process_stage, public_message, updated_by)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [candidateId, previousStage, nextStage, stageMessage, actorId],
+        );
+      }
       if (revealsIdentity) {
         await client.query(
           'UPDATE blind_candidates SET identity_revealed_at = now() WHERE id = $1',

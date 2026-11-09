@@ -18,6 +18,8 @@ const configuracionInicial = {
     laborRegimes: ['CAS'],
     contractTypes: ['CAS', 'Plazo fijo', 'Plazo indeterminado', 'Suplencia'],
     organizationalAreas: [],
+    positionLevels: ['Directivo', 'Profesional', 'Técnico', 'Auxiliar'],
+    educationLevels: ['Secundaria completa', 'Técnica básica', 'Técnica superior', 'Bachiller universitario', 'Título profesional', 'Posgrado'],
   },
 };
 
@@ -32,9 +34,8 @@ const usuarioNuevo = {
 
 const perfiles = [
   { role: 'Administrador', permissions: 'Administración de usuarios y sistema, auditoría y operaciones' },
-  { role: 'Especialista RR.HH. / Evaluador', permissions: 'Solicitudes, trabajadores, documentos, evaluaciones e informes' },
+  { role: 'Especialista RR.HH.', permissions: 'Solicitudes, trabajadores, documentos, evaluaciones e informes' },
   { role: 'Jefe de Área', permissions: 'Lectura de trabajadores y perfiles; solicitudes e informes de su área' },
-  { role: 'Evaluador / Comité', permissions: 'Lectura de perfiles, preselección ciega, evaluación y lectura documental' },
 ];
 
 const catalogos = [
@@ -42,6 +43,8 @@ const catalogos = [
   { key: 'laborRegimes', label: 'Regímenes laborales' },
   { key: 'contractTypes', label: 'Tipos de contratos' },
   { key: 'organizationalAreas', label: 'Áreas orgánicas' },
+  { key: 'positionLevels', label: 'Niveles / grupos de puesto' },
+  { key: 'educationLevels', label: 'Formación académica' },
 ];
 
 function mezclarConfiguracion(settings) {
@@ -350,9 +353,9 @@ export default function Configuracion() {
               <label className="text-sm font-medium text-gray-800">
                 Rol
                 <select required value={formularioUsuario.role} onChange={(event) => cambiarUsuario('role', event.target.value)} disabled={guardandoUsuario} className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-2.5">
-                  <option value="hr_specialist">RR.HH. / Evaluador</option>
+                  {usuarioEditando?.role === 'committee' && <option value="committee" disabled>Rol anterior (sin acceso; elige uno nuevo)</option>}
+                  <option value="hr_specialist">Especialista RR.HH.</option>
                   <option value="area_manager">Jefe de Área</option>
-                  <option value="committee">Evaluador / Comité</option>
                   {usuarioEditando?.role === 'admin' && <option value="admin">Administrador</option>}
                 </select>
               </label>
@@ -372,7 +375,7 @@ export default function Configuracion() {
                 </label>
               )}
               <div className="flex flex-wrap gap-2 sm:col-span-2">
-                <button type="submit" disabled={guardandoUsuario} className="rounded-lg bg-blue-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900 disabled:bg-gray-400">
+                <button type="submit" disabled={guardandoUsuario || formularioUsuario.role === 'committee'} className="rounded-lg bg-blue-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900 disabled:bg-gray-400">
                   {guardandoUsuario ? 'Guardando…' : usuarioEditando ? 'Guardar usuario' : 'Crear usuario'}
                 </button>
                 {usuarioEditando && <button type="button" onClick={cancelarEdicionUsuario} disabled={guardandoUsuario} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-white">Cancelar</button>}
@@ -387,7 +390,7 @@ export default function Configuracion() {
                     <tr key={usuario.id}>
                       <td className="py-3 pr-4 font-medium text-gray-900">{usuario.username}</td>
                       <td className="py-3 pr-4">{usuario.display_name}</td>
-                      <td className="py-3 pr-4">{({ admin: 'Administrador', hr_specialist: 'RR.HH. / Evaluador', area_manager: 'Jefe de Área', committee: 'Evaluador / Comité' })[usuario.role] || usuario.role}<span className="block text-xs text-gray-500">{usuario.area_name || 'Sin área asignada'}</span></td>
+                      <td className="py-3 pr-4">{({ admin: 'Administrador', hr_specialist: 'Especialista RR.HH.', area_manager: 'Jefe de Área', committee: 'Rol anterior (sin acceso)' })[usuario.role] || 'Rol no reconocido'}<span className="block text-xs text-gray-500">{usuario.area_name || 'Sin área asignada'}</span></td>
                       <td className="py-3 pr-4">{usuario.is_active ? 'Activo' : 'Inactivo'}</td>
                       <td className="py-3"><button type="button" onClick={() => editarUsuario(usuario)} disabled={guardandoUsuario || usuario.username === 'admin'} className="font-semibold text-blue-900 hover:underline disabled:text-gray-400">Editar</button></td>
                     </tr>

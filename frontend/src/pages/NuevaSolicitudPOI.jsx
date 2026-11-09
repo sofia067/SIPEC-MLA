@@ -47,7 +47,7 @@ return (
         </header>
         {/*  Formulario y cuadro de resumen  */}
         <main className="p-8 space-y-6">
-          <h2 className="text-2xl font-bold text-gray-800">Nueva solicitud de cobertura</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Nueva convocatoria de personal</h2>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             

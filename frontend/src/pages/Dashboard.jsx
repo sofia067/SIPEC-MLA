@@ -34,10 +34,9 @@ function Dashboard() {
 
   const summary = dashboard?.summary;
   const recentRequests = dashboard?.requests ?? [];
-  const esComite = user?.role === 'committee';
   const puedeSolicitudes = ['admin', 'hr_specialist', 'area_manager'].includes(user?.role);
   const puedeGestionarPersonal = ['admin', 'hr_specialist', 'area_manager'].includes(user?.role);
-  const puedeValidarDocumentos = ['admin', 'hr_specialist', 'committee'].includes(user?.role);
+  const puedeValidarDocumentos = ['admin', 'hr_specialist'].includes(user?.role);
   const puedeVerInformes = ['admin', 'hr_specialist', 'area_manager'].includes(user?.role);
   const formatStatus = (status) => ({
     pending: 'Pendiente',
@@ -115,8 +114,7 @@ function Dashboard() {
           </div>
 
           {/* Sección Inferior */}
-          {!esComite && (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
             
             {/* Tabla de Solicitudes Recientes */}
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 lg:col-span-2 sm:p-5">
@@ -229,7 +227,7 @@ function Dashboard() {
                           Revisar
                         </button>
                       </li>}
-                      {['admin', 'hr_specialist', 'committee'].includes(user?.role) && <li className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 p-3">
+                      {['admin', 'hr_specialist'].includes(user?.role) && <li className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 p-3">
                         <span>{summary?.pending_technical_evaluations ?? 0} evaluaciones técnicas pendientes</span>
                         <button type="button" onClick={() => navigate('/evaluacion')} className="shrink-0 font-semibold text-blue-800 hover:underline">
                           Revisar
@@ -252,7 +250,7 @@ function Dashboard() {
                 <div className="grid grid-cols-2 gap-3 text-center">
                   {puedeSolicitudes && <button onClick={() => navigate('/nueva-solicitud')} className="p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition flex flex-col items-center justify-center gap-1.5 bg-gray-50">
                     <span className="text-xl">📄</span>
-                    <span className="text-xs font-semibold text-gray-700">Nueva solicitud</span>
+                    <span className="text-xs font-semibold text-gray-700">Nueva convocatoria</span>
                   </button>}
                   {puedeGestionarPersonal && <button onClick={() => navigate('/trabajadores')} className="p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition flex flex-col items-center justify-center gap-1.5 bg-gray-50">
                     <span className="text-xl">👤</span>
@@ -272,7 +270,6 @@ function Dashboard() {
             </div>
 
             </div>
-          )}
 
         </main>
       </div>

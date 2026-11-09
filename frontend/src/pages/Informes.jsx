@@ -96,7 +96,7 @@ export default function Informes() {
         <main className="p-4 sm:p-8 space-y-6">
           <div className="border-b pb-4">
             <h2 className="text-2xl font-bold text-gray-900">Informes de gestión</h2>
-            <p className="mt-1 text-sm text-gray-600">Indicadores y seguimiento de solicitudes de cobertura.</p>
+            <p className="mt-1 text-sm text-gray-600">Indicadores y seguimiento de convocatorias de personal.</p>
           </div>
 
           {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">No se pudieron cargar los informes: {error}</div>}

@@ -21,8 +21,7 @@ import ProtectedRole from './auth/ProtectedRole';
 
 const ADMIN_RRHH = ['admin', 'hr_specialist'];
 const ADMIN_RRHH_JEFE = [...ADMIN_RRHH, 'area_manager'];
-const ADMIN_RRHH_COMITE = [...ADMIN_RRHH, 'committee'];
-const TODOS_LOS_PERFILES = [...ADMIN_RRHH_JEFE, 'committee'];
+const TODOS_LOS_ROLES = ADMIN_RRHH_JEFE;
 
 function App() {
   return (
@@ -34,15 +33,15 @@ function App() {
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/solicitudes-cobertura" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_JEFE}><SolicitudesCobertura /></ProtectedRole></ProtectedRoute>} />
           <Route path="/nueva-solicitud" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_JEFE}><SolicitudesCobertura /></ProtectedRole></ProtectedRoute>} />
-          <Route path="/perfil-puesto" element={<ProtectedRoute><ProtectedRole roles={TODOS_LOS_PERFILES}><PerfilPuesto /></ProtectedRole></ProtectedRoute>} />
-          <Route path="/perfil-puesto/detalle/:id" element={<ProtectedRoute><ProtectedRole roles={TODOS_LOS_PERFILES}><PerfilPuestoDetalle /></ProtectedRole></ProtectedRoute>} />
+          <Route path="/perfil-puesto" element={<ProtectedRoute><ProtectedRole roles={TODOS_LOS_ROLES}><PerfilPuesto /></ProtectedRole></ProtectedRoute>} />
+          <Route path="/perfil-puesto/detalle/:id" element={<ProtectedRoute><ProtectedRole roles={TODOS_LOS_ROLES}><PerfilPuestoDetalle /></ProtectedRole></ProtectedRoute>} />
           <Route path="/mi-perfil" element={<ProtectedRoute><MiPerfil /></ProtectedRoute>} />
-          <Route path="/candidatos-compatibles" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_COMITE}><CandidatosCompatibles /></ProtectedRole></ProtectedRoute>} />
+          <Route path="/candidatos-compatibles" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH}><CandidatosCompatibles /></ProtectedRole></ProtectedRoute>} />
           <Route path="/trabajadores" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_JEFE}><Trabajadores /></ProtectedRole></ProtectedRoute>} />
           <Route path="/trabajadores/expediente" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_JEFE}><ExpedienteTrabajador /></ProtectedRole></ProtectedRoute>} />
-          <Route path="/validacion-ocr" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_COMITE}><ValidacionOCR /></ProtectedRole></ProtectedRoute>} />
-          <Route path="/evaluacion" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_COMITE}><Evaluacion /></ProtectedRole></ProtectedRoute>} />
-          <Route path="/evaluaciones" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_COMITE}><Evaluacion /></ProtectedRole></ProtectedRoute>} />
+          <Route path="/validacion-ocr" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH}><ValidacionOCR /></ProtectedRole></ProtectedRoute>} />
+          <Route path="/evaluacion" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH}><Evaluacion /></ProtectedRole></ProtectedRoute>} />
+          <Route path="/evaluaciones" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH}><Evaluacion /></ProtectedRole></ProtectedRoute>} />
           <Route path="/informes" element={<ProtectedRoute><ProtectedRole roles={ADMIN_RRHH_JEFE}><Informes /></ProtectedRole></ProtectedRoute>} />
           <Route path="/auditoria" element={<ProtectedRoute><ProtectedRole roles={['admin']}><Auditoria /></ProtectedRole></ProtectedRoute>} />
           <Route path="/configuracion" element={<ProtectedRoute><ProtectedRole roles={['admin']}><Configuracion /></ProtectedRole></ProtectedRoute>} />

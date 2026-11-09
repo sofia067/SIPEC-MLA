@@ -8,11 +8,10 @@ import { authService } from '../services/auth-service.js';
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(80),
   password: z.string().min(1).max(256),
-  role: z.enum(['jefe', 'rrhh', 'admin', 'comite']).transform((role) => ({
+  role: z.enum(['jefe', 'rrhh', 'admin']).transform((role) => ({
     jefe: 'area_manager',
     rrhh: 'hr_specialist',
     admin: 'admin',
-    comite: 'committee',
   })[role]),
 });
 const loginLimiter = rateLimit({

@@ -71,7 +71,7 @@ function Login() {
 
           <form onSubmit={manejarIngreso} className="space-y-4 text-xs">
             <div>
-              <label className="block text-gray-700 font-semibold mb-1">Usuario *</label>
+              <label className="block text-gray-700 font-semibold mb-1">Usuario</label>
               <input 
                 type="text" 
                 name="usuario"
@@ -85,7 +85,7 @@ function Login() {
             </div>
 
             <div>
-              <label className="block text-gray-700 font-semibold mb-1">Contraseña *</label>
+              <label className="block text-gray-700 font-semibold mb-1">Contraseña</label>
               <input 
                 type="password" 
                 name="password"
@@ -99,7 +99,7 @@ function Login() {
             </div>
 
             <div>
-              <label className="block text-gray-700 font-semibold mb-1">Rol *</label>
+              <label className="block text-gray-700 font-semibold mb-1">Rol</label>
               <select 
                 name="rol"
                 value={credenciales.rol}
@@ -111,7 +111,6 @@ function Login() {
                 <option value="">Seleccione su rol</option>
                 <option value="jefe">Jefe de Área</option>
                 <option value="rrhh">Especialista RR.HH.</option>
-                <option value="comite">Evaluador / Comité</option>
                 <option value="admin">Administrador</option>
               </select>
             </div>

@@ -10,15 +10,9 @@ export default function NotificationBell() {
   const { user } = useAuth();
 
   useEffect(() => {
-    const esComite = user?.role === 'committee';
-    const endpoint = esComite ? '/blind-selection/candidates' : '/requests';
-    apiRequest(endpoint)
+    apiRequest('/requests')
       .then((result) => {
-        const total = esComite
-          ? result.candidates.filter((candidate) => (
-            candidate.objective_score === 100 && candidate.written_review_status === 'pending'
-          )).length
-          : result.requests.filter((request) => ['pending', 'in_review'].includes(request.status)).length;
+        const total = result.requests.filter((request) => ['pending', 'in_review'].includes(request.status)).length;
         setPendientes(total);
       })
       .catch((requestError) => setError(requestError.message));
@@ -52,16 +46,12 @@ export default function NotificationBell() {
           ) : (
             <p className="mt-2 text-sm text-gray-600">
               {pendientes
-                ? user?.role === 'committee'
-                  ? `Tienes ${pendientes} evaluaciones pendientes de revisar.`
-                  : `Tienes ${pendientes} solicitudes pendientes o en revisión.`
-                : user?.role === 'committee'
-                  ? 'No tienes evaluaciones pendientes.'
-                  : 'No tienes solicitudes pendientes.'}
+                ? `Tienes ${pendientes} solicitudes pendientes o en revisión.`
+                : 'No tienes solicitudes pendientes.'}
             </p>
           )}
           <Link
-            to={user?.role === 'committee' ? '/evaluacion' : '/solicitudes-cobertura'}
+            to="/solicitudes-cobertura"
             onClick={() => setAbierto(false)}
             className="mt-3 inline-block text-sm font-semibold text-blue-900 hover:underline"
           >

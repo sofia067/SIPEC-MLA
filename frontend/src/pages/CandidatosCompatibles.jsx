@@ -1,87 +1,82 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
+import { apiRequest } from '../services/api';
+
+const etapasProceso = {
+  application_received: 'Postulación recibida',
+  document_review: 'Revisión de documentos',
+  exam: 'Examen',
+  interview: 'Entrevista personal',
+  practical: 'Práctica básica',
+  final_result: 'Resultado final',
+};
+
+const estadoMatch = {
+  calculated: 'Calculado',
+  pending: 'Pendiente de cálculo',
+  insufficient_data: 'Datos insuficientes',
+  extraction_failed: 'No se pudo leer el CV',
+};
+
+const fechaRevisionCv = (date) => date
+  ? new Intl.DateTimeFormat('es-PE', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'America/Lima',
+  }).format(new Date(date))
+  : '';
 
 export default function CandidatosCompatibles() {
   const navigate = useNavigate();
-
-  const solicitudes = [
-    {
-      codigo: 'SC-001',
-      puesto: 'Técnico de Fiscalización y Coactiva',
-      prioridad: 'Prioridad Alta',
-      descripcion: 'Apoyar las acciones de fiscalización municipal y el seguimiento de procedimientos de ejecución coactiva.',
-      criterios: 'Competencias técnicas, años de experiencia y grado académico acreditado.',
-    },
-    {
-      codigo: 'SC-002',
-      puesto: 'Subgerente de Infraestructura',
-      prioridad: 'Prioridad Media',
-      descripcion: 'Coordinar la planificación, ejecución y supervisión de proyectos de infraestructura municipal.',
-      criterios: 'Formación en ingeniería o arquitectura, experiencia en obras públicas y gestión de proyectos.',
-    },
-    {
-      codigo: 'SC-003',
-      puesto: 'Inspector de Servicios Municipales',
-      prioridad: 'Prioridad Media',
-      descripcion: 'Realizar inspecciones de campo y verificar el cumplimiento de las normas y servicios municipales.',
-      criterios: 'Experiencia en inspección de campo, conocimiento normativo y comunicación efectiva.',
-    },
-  ];
-
-  const [solicitudFiltro, setSolicitudFiltro] = useState('SC-001');
+  const [solicitudFiltro, setSolicitudFiltro] = useState('');
   const [candidatoSeleccionado, setCandidatoSeleccionado] = useState(null);
-  const solicitudActiva = solicitudes.find((solicitud) => solicitud.codigo === solicitudFiltro);
+  const [cvSeleccionado, setCvSeleccionado] = useState(null);
+  const [revisionCv, setRevisionCv] = useState(null);
+  const [cargandoRevisionCv, setCargandoRevisionCv] = useState(false);
+  const [errorRevisionCv, setErrorRevisionCv] = useState('');
+  const [candidatos, setCandidatos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+  const solicitudes = [...new Map(candidatos.map((candidato) => [
+    candidato.request_id,
+    {
+      id: candidato.request_id,
+      codigo: candidato.request_code,
+      puesto: candidato.position_title,
+      prioridad: candidato.priority,
+      departamento: candidato.department,
+      descripcion: candidato.reason,
+    },
+  ])).values()];
+  const solicitudActiva = solicitudes.find((solicitud) => solicitud.id === solicitudFiltro);
+  const candidatosFiltrados = candidatos.filter((candidato) => candidato.request_id === solicitudFiltro);
 
-  // Datos de demostración: no representan postulaciones reales.
-  const [candidatos] = useState([
-    {
-      codigo: 'Postulante #001',
-      solicitud: 'SC-001',
-      puestoActual: 'Inspector Operativo',
-      experiencia: '4 años en gestión pública',
-      estudios: 'Técnico en Administración Pública',
-      match: 95,
-      estado: 'Sugerido',
-      puntosFuertes: ['Experiencia en fiscalización municipal', 'Formación técnica relacionada', 'Conocimiento de procedimientos administrativos'],
-      observaciones: []
-    },
-    {
-      codigo: 'Postulante #002',
-      solicitud: 'SC-001',
-      puestoActual: 'Asistente de Fiscalización',
-      experiencia: '3 años en fiscalización de campo',
-      estudios: 'Egresado Técnico',
-      match: 84,
-      estado: 'En revisión',
-      puntosFuertes: ['Experiencia previa en roles de fiscalización', 'Capacitación en normativa municipal'],
-      observaciones: ['Requiere adjuntar actualización de Declaración Jurada']
-    },
-    {
-      codigo: 'Postulante #003',
-      solicitud: 'SC-003',
-      puestoActual: 'Personal Operativo Municipal',
-      experiencia: '2 años en servicios de campo',
-      estudios: 'Secundaria Completa',
-      match: 68,
-      estado: 'Pendiente',
-      puntosFuertes: ['Conocimiento operativo de la jurisdicción local'],
-      observaciones: ['Falta 1 año de experiencia específica según perfil requerido']
-    },
-    {
-      codigo: 'Postulante #004',
-      solicitud: 'SC-002',
-      puestoActual: 'Asistente de Obras',
-      experiencia: '5 años en supervisión de obras',
-      estudios: 'Bachiller en Ingeniería Civil',
-      match: 88,
-      estado: 'En revisión',
-      puntosFuertes: ['Experiencia en obras públicas', 'Formación relacionada al puesto'],
-      observaciones: ['Pendiente verificar certificados de especialización']
+  async function revisarCv(candidato) {
+    setCvSeleccionado(candidato);
+    setRevisionCv(null);
+    setErrorRevisionCv('');
+    setCargandoRevisionCv(true);
+    try {
+      const { review } = await apiRequest(`/blind-selection/candidates/${candidato.id}/resume-review`);
+      setRevisionCv(review);
+    } catch (requestError) {
+      setErrorRevisionCv(requestError.message);
+    } finally {
+      setCargandoRevisionCv(false);
     }
-  ]);
-  const candidatosFiltrados = candidatos.filter((candidato) => candidato.solicitud === solicitudFiltro);
+  }
+
+  useEffect(() => {
+    apiRequest('/blind-selection/candidates')
+      .then(({ candidates: currentCandidates }) => {
+        setCandidatos(currentCandidates);
+        setSolicitudFiltro(currentCandidates[0]?.request_id ?? '');
+      })
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setCargando(false));
+  }, []);
 
   return (
     <div className="app-shell flex h-dvh flex-col bg-gray-100 font-sans text-gray-800 md:flex-row">
@@ -107,13 +102,13 @@ export default function CandidatosCompatibles() {
                 <h2 className="text-2xl font-bold text-gray-900">Candidatos Compatibles</h2>
               </div>
               <p className="text-xs text-gray-500">
-                Ranking de evaluación automatizada con datos anonimizados para prevenir sesgos de selección.
+                Compatibilidad estimada entre el CV y los requisitos del puesto. Los resultados son referenciales y no reemplazan la revisión de RR. HH.
               </p>
             </div>
 
             {/* Selector de Solicitud de Cobertura */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
-              <label className="font-semibold text-gray-700">Solicitud activa:</label>
+              <label className="font-semibold text-gray-700">Convocatoria:</label>
               <select
                 value={solicitudFiltro}
                 onChange={(e) => {
@@ -123,7 +118,7 @@ export default function CandidatosCompatibles() {
                 className="w-full sm:w-auto border bg-white px-3 py-1.5 rounded-lg font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
               >
                 {solicitudes.map((solicitud) => (
-                  <option key={solicitud.codigo} value={solicitud.codigo}>
+                  <option key={solicitud.id} value={solicitud.id}>
                     {solicitud.codigo} | {solicitud.puesto} ({solicitud.prioridad})
                   </option>
                 ))}
@@ -137,7 +132,7 @@ export default function CandidatosCompatibles() {
               <span className="text-xl">🛡️</span>
               <div>
                 <p className="font-bold">Principio de Imparcialidad y Meritocracia</p>
-                <p className="text-[11px] text-amber-700">Esta demostración usa postulantes y resultados ficticios; no muestra datos personales reales.</p>
+                <p className="text-[11px] text-amber-700">Se muestran códigos anónimos. El porcentaje es una coincidencia de términos y debe verificarse junto con el CV.</p>
               </div>
             </div>
           </div>
@@ -146,27 +141,34 @@ export default function CandidatosCompatibles() {
           <div className="bg-white border border-gray-200 border-l-4 border-l-blue-900 p-5 rounded-xl shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div className="space-y-1">
               <span className="text-[10px] bg-blue-50 text-blue-900 uppercase font-bold px-2 py-0.5 rounded">
-                Requerimiento Activo · {solicitudActiva.codigo}
+                Convocatoria · {solicitudActiva?.codigo ?? '—'}
               </span>
-              <h3 className="text-lg font-bold text-gray-900">Puesto: {solicitudActiva.puesto}</h3>
-              <p className="text-sm text-gray-700">{solicitudActiva.descripcion}</p>
-              <p className="text-xs text-gray-600"><strong>Criterios de evaluación:</strong> {solicitudActiva.criterios}</p>
+              <h3 className="text-lg font-bold text-gray-900">Puesto: {solicitudActiva?.puesto ?? 'Sin postulantes registrados'}</h3>
+              {solicitudActiva?.departamento && <p className="text-sm text-gray-700">Área: {solicitudActiva.departamento}</p>}
+              {solicitudActiva?.descripcion && <p className="text-sm text-gray-700">{solicitudActiva.descripcion}</p>}
+              <p className="text-xs text-gray-600"><strong>Criterios:</strong> Comparación referencial de términos del CV con los requisitos configurados en el perfil del puesto.</p>
             </div>
             <div className="shrink-0 rounded-lg bg-blue-50 px-4 py-2 text-center">
               <p className="text-2xl font-extrabold text-blue-900">{candidatosFiltrados.length}</p>
-              <p className="text-[11px] text-gray-600">Postulantes de prueba</p>
+              <p className="text-[11px] text-gray-600">Postulaciones</p>
             </div>
           </div>
 
+          {error && <div role="alert" className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+
           {/* Lista de Postulantes Anónimos */}
           <div className="space-y-4">
-            {candidatosFiltrados.length === 0 ? (
+            {cargando ? (
+              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-600">Cargando postulaciones…</div>
+            ) : candidatosFiltrados.length === 0 ? (
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-600">
-                No hay postulantes de prueba para esta solicitud.
+                {solicitudes.length
+                  ? 'Aún no hay postulaciones para esta solicitud.'
+                  : 'Aún no hay postulaciones recibidas desde el portal.'}
               </div>
             ) : candidatosFiltrados.map((cand) => (
               <div
-                key={cand.codigo}
+                key={cand.id}
                 className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5"
               >
                 {/* Código de Selección Ciega */}
@@ -175,30 +177,37 @@ export default function CandidatosCompatibles() {
                     👤 #
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900 text-sm font-mono">{cand.codigo}</h4>
-                    <p className="text-xs text-gray-500">{cand.puestoActual}</p>
+                    <h4 className="font-bold text-gray-900 text-sm font-mono">{cand.application_code}</h4>
+                    <p className="text-xs text-gray-500">{cand.position_title}</p>
                     <span className="text-[10px] bg-gray-100 text-gray-600 font-semibold px-2 py-0.5 rounded">Identidad Protegida</span>
+                    {cand.has_resume && (
+                      <p className={`mt-1 text-[10px] font-semibold ${cand.resume_reviewed_at ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {cand.resume_reviewed_at
+                          ? `CV revisado · ${fechaRevisionCv(cand.resume_reviewed_at)}${cand.resume_reviewed_by_name ? ` por ${cand.resume_reviewed_by_name}` : ''}`
+                          : 'CV pendiente de revisión'}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                {/* Experiencia y Estudios Acreditados */}
+                {/* Estado de la postulación */}
                 <div className="text-xs space-y-1 lg:w-1/4">
-                  <p><strong className="text-gray-700">Experiencia:</strong> {cand.experiencia}</p>
-                  <p><strong className="text-gray-700">Nivel académico:</strong> {cand.estudios}</p>
+                  <p><strong className="text-gray-700">Etapa:</strong> {etapasProceso[cand.process_stage] ?? cand.process_stage}</p>
+                  <p><strong className="text-gray-700">Compatibilidad:</strong> {estadoMatch[cand.match_status] ?? 'Sin información'}</p>
                 </div>
 
                 {/* Porcentaje de Match / Compatibilidad */}
                 <div className="w-full lg:w-1/4 space-y-1.5">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-gray-700">Puntaje de Match:</span>
-                    <span className={`font-bold ${cand.match >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {cand.match}%
+                    <span className={`font-bold ${Number(cand.match_score) >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {cand.match_score === null ? '—' : `${cand.match_score}%`}
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${cand.match >= 80 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                      style={{ width: `${cand.match}%` }}
+                      className={`h-full rounded-full ${Number(cand.match_score) >= 80 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                      style={{ width: `${Number(cand.match_score) || 0}%` }}
                     ></div>
                   </div>
                 </div>
@@ -212,10 +221,18 @@ export default function CandidatosCompatibles() {
                     Ver Criterios
                   </button>
                   <button
-                    onClick={() => navigate('/validacion-ocr')}
-                    className="bg-blue-950 hover:bg-blue-900 text-white text-xs px-3 py-2 rounded-lg font-semibold transition-colors"
+                    onClick={() => revisarCv(cand)}
+                    disabled={!cand.has_resume}
+                    className="bg-indigo-100 hover:bg-indigo-200 text-indigo-900 text-xs px-3 py-2 rounded-lg font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Validar OCR →
+                    Revisar CV ciego
+                  </button>
+                  <button
+                    onClick={() => navigate(`/validacion-ocr?candidateId=${encodeURIComponent(cand.id)}`)}
+                    disabled={!cand.has_resume}
+                    className="bg-blue-950 hover:bg-blue-900 text-white text-xs px-3 py-2 rounded-lg font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Revisar CV en OCR →
                   </button>
                 </div>
               </div>
@@ -230,8 +247,8 @@ export default function CandidatosCompatibles() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
             <div className="flex justify-between items-start border-b pb-3">
               <div>
-                <h3 className="font-bold text-lg text-gray-900 font-mono">{candidatoSeleccionado.codigo}</h3>
-                <p className="text-xs text-emerald-700 font-medium">Evaluación objetiva por competencias</p>
+                <h3 className="font-bold text-lg text-gray-900 font-mono">{candidatoSeleccionado.application_code}</h3>
+                <p className="text-xs text-emerald-700 font-medium">Detalle referencial del match por términos</p>
               </div>
               <button
                 onClick={() => setCandidatoSeleccionado(null)}
@@ -243,24 +260,28 @@ export default function CandidatosCompatibles() {
 
             <div className="space-y-3 text-xs">
               <div>
-                <h5 className="font-bold text-gray-700 mb-1">Criterios de Compatibilidad Validados:</h5>
-                <ul className="list-disc list-inside text-emerald-700 space-y-1">
-                  {candidatoSeleccionado.puntosFuertes.map((pt, i) => (
-                    <li key={i}>{pt}</li>
-                  ))}
-                </ul>
-              </div>
-
-              {candidatoSeleccionado.observaciones.length > 0 && (
-                <div>
-                  <h5 className="font-bold text-amber-700 mb-1">Observaciones Técnicas:</h5>
-                  <ul className="list-disc list-inside text-amber-600 space-y-1">
-                    {candidatoSeleccionado.observaciones.map((obs, i) => (
-                      <li key={i}>{obs}</li>
-                    ))}
-                  </ul>
+                {candidatoSeleccionado.match_status === 'calculated' ? (
+                  <>
+                    <h5 className="font-bold text-gray-700 mb-1">Criterios comparados:</h5>
+                    <ul className="space-y-2">
+                      {(candidatoSeleccionado.match_breakdown ?? []).map((criterion) => (
+                        <li key={criterion.key} className="rounded bg-gray-50 p-2">
+                          <p className="font-semibold text-gray-800">{criterion.label}: {criterion.score}%</p>
+                          <p className="text-gray-600">
+                          Términos coincidentes: {criterion.matchedTerms?.length ?? 0} de {criterion.requiredTermCount}
+                          </p>
+                          {criterion.matchedTerms?.length > 0 && (
+                            <p className="mt-1 text-emerald-700">{criterion.matchedTerms.join(', ')}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="text-amber-700">{estadoMatch[candidatoSeleccionado.match_status] ?? 'No se pudo calcular el match para este CV.'}</p>
+                )}
+                <p className="mt-3 text-gray-500">El resultado es una coincidencia literal orientativa; no acredita requisitos ni sustituye la revisión del CV.</p>
                 </div>
-              )}
             </div>
 
             <div className="pt-3 border-t">
@@ -275,6 +296,80 @@ export default function CandidatosCompatibles() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {cvSeleccionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="resume-review-title"
+            className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+          >
+            <header className="flex items-start justify-between gap-4 border-b p-5">
+              <div>
+                <h3 id="resume-review-title" className="font-mono text-lg font-bold text-gray-900">
+                  CV · {cvSeleccionado.application_code}
+                </h3>
+                <p className="text-xs text-gray-600">Texto extraído con ocultamiento inicial de identificadores</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCvSeleccionado(null)}
+                aria-label="Cerrar revisión del CV"
+                className="text-lg font-bold text-gray-500 hover:text-gray-800"
+              >
+                ✕
+              </button>
+            </header>
+
+            <div className="overflow-y-auto p-5">
+              <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                {revisionCv?.warning ?? 'No se muestra el PDF original. El texto puede contener datos personales que el sistema no detecta; verifica manualmente que no identifique al postulante.'}
+              </div>
+              {cargandoRevisionCv ? (
+                <p className="py-8 text-center text-sm text-gray-600">Extrayendo y preparando el texto del CV…</p>
+              ) : errorRevisionCv ? (
+                <p role="alert" className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{errorRevisionCv}</p>
+              ) : revisionCv && (
+                <>
+                  {revisionCv.identityMismatch && (
+                    <p role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+                      No se pudo confirmar la identidad del CV. Por privacidad, se ocultó todo el texto.
+                    </p>
+                  )}
+                  <div className={`mb-4 rounded-lg p-3 text-xs ${
+                    revisionCv.quality.quality === 'readable'
+                      ? 'bg-emerald-50 text-emerald-900'
+                      : revisionCv.quality.quality === 'review'
+                        ? 'bg-amber-50 text-amber-900'
+                        : 'bg-red-50 text-red-900'
+                  }`}>
+                    <p className="font-bold">
+                      Calidad de lectura: {
+                        revisionCv.quality.quality === 'readable'
+                          ? 'Texto suficiente; requiere verificación'
+                          : revisionCv.quality.quality === 'review'
+                            ? 'Revisión manual recomendada'
+                            : 'Texto insuficiente'
+                      }
+                    </p>
+                    <p className="mt-1">
+                      {revisionCv.quality.wordCount} palabras · {revisionCv.quality.characterCount} caracteres
+                      {revisionCv.quality.suspiciousCharacterCount > 0 &&
+                        ` · ${revisionCv.quality.suspiciousCharacterCount} caracteres sospechosos`}
+                    </p>
+                  </div>
+                  <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-gray-200 bg-gray-50 p-4 text-xs leading-relaxed text-gray-800">
+                    {revisionCv.identityMismatch
+                      ? 'Texto oculto por privacidad.'
+                      : revisionCv.text || 'No se pudo extraer texto del CV.'}
+                  </pre>
+                </>
+              )}
+            </div>
+          </section>
         </div>
       )}
     </div>

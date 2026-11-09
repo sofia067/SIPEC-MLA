@@ -11,7 +11,6 @@ export default function UserDropdown() {
     admin: 'Administrador',
     hr_specialist: 'Especialista RR.HH.',
     area_manager: 'Jefe de Área',
-    committee: 'Evaluador / Comité',
   };
   const initials = (user?.displayName || user?.username || '?')
     .split(/\s+/)

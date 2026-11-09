@@ -27,7 +27,7 @@ function ProfileField({ label, value, onChange, rows = 1, required = false, type
   const className = 'mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900';
   return (
     <label className="block text-sm font-medium text-gray-700">
-      {label}{required && ' *'}
+      {label}
       {rows > 1 ? (
         <textarea className={className} rows={rows} value={value} onChange={onChange} required={required} />
       ) : (
@@ -42,6 +42,7 @@ export default function PerfilPuesto() {
   const { user } = useAuth();
   const puedeGestionarPerfiles = ['admin', 'hr_specialist'].includes(user?.role);
   const [profiles, setProfiles] = useState([]);
+  const [lookupData, setLookupData] = useState({ departments: [], catalogData: { positionLevels: [], educationLevels: [] } });
   const [areaFilter, setAreaFilter] = useState('Todas');
   const [search, setSearch] = useState('');
   const [form, setForm] = useState(emptyProfile);
@@ -56,7 +57,6 @@ export default function PerfilPuesto() {
     try {
       const { profiles: loadedProfiles } = await apiRequest('/profiles');
       setProfiles(loadedProfiles);
-      setError('');
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -66,6 +66,11 @@ export default function PerfilPuesto() {
 
   useEffect(() => {
     loadProfiles();
+    if (puedeGestionarPerfiles) {
+      apiRequest('/lookups')
+        .then(setLookupData)
+        .catch((requestError) => setError(requestError.message));
+    }
   }, []);
 
   async function saveProfile(event) {
@@ -232,10 +237,28 @@ export default function PerfilPuesto() {
               <section className="grid gap-4 md:grid-cols-2">
                 <ProfileField label="Nombre del puesto" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
                 <ProfileField label="Código del perfil" value={form.profileCode} onChange={(event) => setForm({ ...form, profileCode: event.target.value })} />
-                <ProfileField label="Unidad orgánica" required value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} />
-                <ProfileField label="Nivel / Grupo" required value={form.level} onChange={(event) => setForm({ ...form, level: event.target.value })} />
+                <label className="block text-sm font-medium text-gray-700">
+                  Unidad orgánica
+                  <select required value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900">
+                    <option value="">Selecciona un área</option>
+                    {lookupData.departments.map((department) => <option key={department.name} value={department.name}>{department.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Nivel / Grupo
+                  <select required value={form.level} onChange={(event) => setForm({ ...form, level: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900">
+                    <option value="">Selecciona un nivel o grupo</option>
+                    {lookupData.catalogData.positionLevels.map((level) => <option key={level} value={level}>{level}</option>)}
+                  </select>
+                </label>
                 <ProfileField label="Remuneración referencial (S/)" type="number" step="0.01" value={form.remuneration} onChange={(event) => setForm({ ...form, remuneration: event.target.value })} />
-                <ProfileField label="Formación académica" rows={2} value={form.education} onChange={(event) => setForm({ ...form, education: event.target.value })} />
+                <label className="block text-sm font-medium text-gray-700">
+                  Formación académica
+                  <select value={form.education} onChange={(event) => setForm({ ...form, education: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900">
+                    <option value="">Selecciona una formación</option>
+                    {lookupData.catalogData.educationLevels.map((education) => <option key={education} value={education}>{education}</option>)}
+                  </select>
+                </label>
                 <ProfileField label="Experiencia general" rows={2} value={form.generalExperience} onChange={(event) => setForm({ ...form, generalExperience: event.target.value })} />
                 <ProfileField label="Experiencia específica" rows={2} value={form.specificExperience} onChange={(event) => setForm({ ...form, specificExperience: event.target.value })} />
               </section>

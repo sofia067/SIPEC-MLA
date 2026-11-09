@@ -9,7 +9,9 @@ const priorityToDatabase = {
 };
 
 export const requestRepository = {
-  async create({ department, positionTitle, reason, priority, requiredBy, userId }) {
+  async create({
+    department, positionTitle, reason, priority, requiredBy, applicationDeadline, applicationDocuments = [], userId,
+  }) {
     const client = await pool.connect();
 
     try {
@@ -30,8 +32,9 @@ export const requestRepository = {
       const code = `SC-${String(sequenceResult.rows[0].value).padStart(5, '0')}`;
       const requestResult = await client.query(
         `INSERT INTO coverage_requests
-           (code, department_id, position_id, reason, priority, required_by, requested_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (code, department_id, position_id, reason, priority, required_by,
+            application_deadline_original, application_deadline, requested_by, application_documents)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9)
          RETURNING id, code, status,
            CASE priority::text
              WHEN 'high' THEN 'Alta'
@@ -39,7 +42,8 @@ export const requestRepository = {
              WHEN 'low' THEN 'Baja'
            END AS priority,
            created_at`,
-        [code, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priorityToDatabase[priority], requiredBy, userId],
+        [code, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priorityToDatabase[priority],
+          requiredBy, applicationDeadline, userId, JSON.stringify(applicationDocuments)],
       );
       const request = requestResult.rows[0];
       await client.query(
@@ -66,7 +70,10 @@ export const requestRepository = {
               WHEN 'medium' THEN 'Media'
               WHEN 'low' THEN 'Baja'
             END AS priority,
-            r.required_by, r.created_at, u.display_name AS requested_by
+            r.required_by::text AS required_by,
+            r.application_deadline_original::text AS application_deadline_original,
+            r.application_deadline::text AS application_deadline,
+            r.created_at, u.display_name AS requested_by
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
@@ -88,7 +95,11 @@ export const requestRepository = {
               WHEN 'medium' THEN 'Media'
               WHEN 'low' THEN 'Baja'
             END AS priority,
-            r.required_by, r.created_at,
+            r.required_by::text AS required_by,
+            r.application_deadline_original::text AS application_deadline_original,
+            r.application_deadline::text AS application_deadline,
+            r.application_documents,
+            r.created_at,
               r.reviewed_at, u.display_name AS requested_by
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
@@ -104,12 +115,20 @@ export const requestRepository = {
   async listPublicOpenings() {
     const result = await pool.query(
       `SELECT r.id, r.code, p.title AS position_title, d.name AS department,
+              COALESCE(
+                (r.reviewed_at AT TIME ZONE 'America/Lima')::date,
+                (r.created_at AT TIME ZONE 'America/Lima')::date
+              )::text AS application_start_date,
+              r.application_deadline_original::text AS application_deadline_original,
+              r.application_deadline::text AS application_deadline,
+              r.application_documents,
               p.description, p.education, p.general_experience, p.specific_experience,
-              array_to_string(p.technical_knowledge, E'\n') AS technical_knowledge
+              p.technical_knowledge
        FROM coverage_requests r
        JOIN departments d ON d.id = r.department_id
        JOIN position_profiles p ON p.id = r.position_id
        WHERE r.status = 'approved'
+         AND r.application_deadline >= CURRENT_DATE
        ORDER BY r.updated_at DESC, p.title`,
     );
     return result.rows;
@@ -145,7 +164,11 @@ export const requestRepository = {
     }
   },
 
-  async updatePending(id, { department, positionTitle, reason, priority, requiredBy }, userId) {
+  async updatePending(
+    id,
+    { department, positionTitle, reason, priority, requiredBy, applicationDeadline, applicationDocuments = [] },
+    userId,
+  ) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -161,10 +184,13 @@ export const requestRepository = {
       );
       const result = await client.query(
         `UPDATE coverage_requests SET department_id = $2, position_id = $3, reason = $4,
-           priority = $5::request_priority, required_by = $6, updated_at = now()
+           priority = $5::request_priority, required_by = $6,
+           application_deadline_original = $7, application_deadline = $7,
+           application_documents = $8, updated_at = now()
          WHERE id = $1 AND status = 'pending'
          RETURNING id, code, status, updated_at`,
-        [id, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priorityToDatabase[priority], requiredBy],
+        [id, departmentResult.rows[0].id, positionResult.rows[0].id, reason, priorityToDatabase[priority],
+          requiredBy, applicationDeadline, JSON.stringify(applicationDocuments)],
       );
       if (result.rowCount) {
         await client.query(
@@ -175,6 +201,65 @@ export const requestRepository = {
       }
       await client.query('COMMIT');
       return result.rows[0] ?? null;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async extendApplicationDeadline(id, applicationDeadline, userId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        `SELECT application_deadline::text AS application_deadline
+         FROM coverage_requests
+         WHERE id = $1 AND status = 'approved'
+         FOR UPDATE`,
+        [id],
+      );
+      if (!current.rowCount) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      const previousDeadline = current.rows[0].application_deadline;
+      if (previousDeadline && applicationDeadline <= previousDeadline) {
+        throw new AppError(400, 'INVALID_APPLICATION_DEADLINE', 'La nueva fecha debe ser posterior a la fecha de cierre actual.');
+      }
+
+      const updated = await client.query(
+        `UPDATE coverage_requests
+         SET application_deadline_original = COALESCE(application_deadline_original, $2),
+             application_deadline = $2, updated_at = now()
+         WHERE id = $1
+         RETURNING id, application_deadline_original::text AS application_deadline_original,
+                   application_deadline::text AS application_deadline`,
+        [id, applicationDeadline],
+      );
+      if (previousDeadline) {
+        await client.query(
+          `INSERT INTO coverage_request_deadline_extensions
+             (request_id, previous_deadline, extended_deadline, extended_by)
+           VALUES ($1, $2, $3, $4)`,
+          [id, previousDeadline, applicationDeadline, userId],
+        );
+      }
+      await client.query(
+        `INSERT INTO audit_events (actor_id, event_type, resource_type, resource_id, metadata, ip_address)
+         VALUES ($1, $2, 'coverage_request', $3, $4, $5)`,
+        [
+          userId,
+          previousDeadline ? 'coverage_request.deadline_extended' : 'coverage_request.deadline_set',
+          id,
+          JSON.stringify({ previousDeadline, applicationDeadline }),
+          getRequestIpAddress(),
+        ],
+      );
+      await client.query('COMMIT');
+      return updated.rows[0];
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

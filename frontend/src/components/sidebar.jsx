@@ -5,16 +5,15 @@
 const ADMIN = 'admin';
 const RRHH = 'hr_specialist';
 const JEFE = 'area_manager';
-const COMITE = 'committee';
 
 const enlaces = [
   { ruta: '/dashboard', icono: '🏚️', texto: 'Inicio' },
   { ruta: '/trabajadores', icono: '👥', texto: 'Trabajadores', roles: [ADMIN, RRHH, JEFE] },
-  { ruta: '/perfil-puesto', icono: '📄', texto: 'Perfiles de puesto', roles: [ADMIN, RRHH, JEFE, COMITE] },
-  { ruta: '/solicitudes-cobertura', icono: '📑', texto: 'Solicitudes de cobertura', roles: [ADMIN, RRHH, JEFE] },
-  { ruta: '/candidatos-compatibles', icono: '🎯', texto: 'Candidatos compatibles', roles: [ADMIN, RRHH, COMITE] },
-  { ruta: '/validacion-ocr', icono: '🛡️', texto: 'Validación documental', roles: [ADMIN, RRHH, COMITE] },
-  { ruta: '/evaluacion', icono: '📝', texto: 'Evaluación', roles: [ADMIN, RRHH, COMITE] },
+  { ruta: '/perfil-puesto', icono: '📄', texto: 'Perfiles de puesto', roles: [ADMIN, RRHH, JEFE] },
+  { ruta: '/solicitudes-cobertura', icono: '📑', texto: 'Convocatorias de personal', roles: [ADMIN, RRHH, JEFE] },
+  { ruta: '/candidatos-compatibles', icono: '🎯', texto: 'Candidatos compatibles', roles: [ADMIN, RRHH] },
+  { ruta: '/validacion-ocr', icono: '🛡️', texto: 'Validación documental', roles: [ADMIN, RRHH] },
+  { ruta: '/evaluacion', icono: '📝', texto: 'Evaluación', roles: [ADMIN, RRHH] },
   { ruta: '/informes', icono: '📊', texto: 'Reportes', roles: [ADMIN, RRHH, JEFE] },
   { ruta: '/auditoria', icono: '🔒', texto: 'Auditoría', roles: [ADMIN] },
   { ruta: '/configuracion', icono: '⚙️', texto: 'Configuración', roles: [ADMIN] },
