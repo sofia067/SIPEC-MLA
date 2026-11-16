@@ -40,16 +40,25 @@ async function seedRoleUsers() {
        WHERE username = 'jefe.area' AND role = 'area_manager'`,
     );
 
-    await client.query(seedSql, users.flatMap((user) => [
-      user.username,
-      user.displayName,
-      user.role,
-      user.areaName,
-      user.passwordHash,
-    ]));
+    const result = await client.query(seedSql, [
+      ...users.flatMap((user) => [
+        user.username,
+        user.displayName,
+        user.role,
+        user.areaName,
+        user.passwordHash,
+      ]),
+      env.RESET_BOOTSTRAP_USER_PASSWORDS === 'true',
+    ]);
+    if (result.rowCount !== users.length) {
+      throw new Error('No se pudieron sincronizar todas las cuentas de rol; revisa sus nombres y roles existentes.');
+    }
 
     await client.query('COMMIT');
-    console.info(`Cuentas de rol configuradas: ${users.map(({ username }) => username).join(', ')}`);
+    const action = env.RESET_BOOTSTRAP_USER_PASSWORDS === 'true'
+      ? 'Contraseñas de cuentas de rol sincronizadas'
+      : 'Cuentas de rol configuradas';
+    console.info(`${action}: ${users.map(({ username }) => username).join(', ')}`);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

@@ -20,6 +20,7 @@ const environmentSchema = z.object({
   HR_SPECIALIST_USERNAME: z.string().trim().min(3).default('rrhh.especialista'),
   HR_SPECIALIST_DISPLAY_NAME: z.string().trim().min(1).default('Sofia'),
   HR_SPECIALIST_PASSWORD: z.string().min(12).optional(),
+  RESET_BOOTSTRAP_USER_PASSWORDS: z.enum(['true', 'false']).default('false'),
   PUBLIC_APPLICATION_PRIVACY_NOTICE_URL: z.preprocess(
     (value) => value === '' ? undefined : value,
     z.string().trim().url().optional(),

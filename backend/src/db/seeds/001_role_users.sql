@@ -5,4 +5,6 @@ VALUES
 ON CONFLICT (lower(username)) DO UPDATE
 SET display_name = EXCLUDED.display_name,
     area_name = COALESCE(NULLIF(users.area_name, ''), EXCLUDED.area_name),
-    updated_at = now();
+    password_hash = CASE WHEN $11::boolean THEN EXCLUDED.password_hash ELSE users.password_hash END,
+    updated_at = now()
+WHERE users.role = EXCLUDED.role;

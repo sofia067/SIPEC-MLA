@@ -32,6 +32,8 @@ Las convocatorias de personal guardan prioridad alta, media o baja; las solicitu
 
 Las migraciones crean la estructura y los comandos `db:seed` / `db:seed:roles` crean cuentas de acceso; no cargan trabajadores ni solicitudes de ejemplo. Si las tablas están vacías, esas listas aparecerán vacías hasta que se registren datos desde el sistema.
 
+En producción, configura `ADMIN_PASSWORD`, `AREA_MANAGER_PASSWORD` y `HR_SPECIALIST_PASSWORD` como secretos del servicio. Para sincronizar una sola vez esos valores con cuentas iniciales que ya existen, activa `RESET_BOOTSTRAP_USER_PASSWORDS=true` en el entorno de despliegue y vuelve a desplegar; verifica en los logs que las contraseñas se sincronizaron y luego desactiva la variable. Por defecto, los seeds no reemplazan contraseñas existentes.
+
 La página de evaluaciones incluye bancos de 20 preguntas para Inspector Tributario y Orientador al Contribuyente, Especialista en Contrataciones del Estado (OEC) y Serenazgo Chofer. Las preguntas y sus claves deben verificarse con fuentes oficiales antes de usarse en procesos reales. El puntaje objetivo se calcula en el backend y se persiste; las respuestas abiertas requieren revisión manual.
 
 Informes consulta indicadores de solicitudes, documentos con OCR completado y trabajadores activos desde PostgreSQL. Auditoría muestra los últimos eventos registrados; su consulta está restringida a administradores.
