@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { extractTextFromFile } from '../src/services/ocr-service.js';
+import { extractTextFromFile, sanitizeExtractedText } from '../src/services/ocr-service.js';
 
 function createTextPdf() {
   const stream = 'BT\n/F1 12 Tf\n72 100 Td\n(OCR file content test) Tj\nET';
@@ -37,4 +37,8 @@ test('extracts PDF text from a file path by reading the file bytes', async () =>
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('replaces null characters in extracted text before persistence', () => {
+  assert.equal(sanitizeExtractedText('Experiencia\u0000laboral'), 'Experiencia laboral');
 });

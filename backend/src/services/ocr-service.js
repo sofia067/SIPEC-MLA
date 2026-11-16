@@ -91,9 +91,15 @@ export async function extractPdfMetadata(filePath) {
 
 export function extractText(buffer, mime) {
   const task = queue.then(async () => {
-    if (mime === 'application/pdf') return extractFromPdf(buffer);
-    if (SUPPORTED_IMAGE_MIME.has(mime)) return extractFromImage(buffer);
-    throw new Error(`Tipo de archivo no soportado para OCR: ${mime}`);
+    let text;
+    if (mime === 'application/pdf') {
+      text = await extractFromPdf(buffer);
+    } else if (SUPPORTED_IMAGE_MIME.has(mime)) {
+      text = await extractFromImage(buffer);
+    } else {
+      throw new Error(`Tipo de archivo no soportado para OCR: ${mime}`);
+    }
+    return sanitizeExtractedText(text);
   });
   queue = task.then(
     () => undefined,
@@ -104,4 +110,8 @@ export function extractText(buffer, mime) {
 
 export async function extractTextFromFile(filePath, mime) {
   return extractText(await readFile(filePath), mime);
+}
+
+export function sanitizeExtractedText(text) {
+  return String(text ?? '').replace(/\u0000/g, ' ');
 }
