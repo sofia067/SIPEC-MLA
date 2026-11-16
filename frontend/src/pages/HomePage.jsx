@@ -39,7 +39,7 @@ export default function HomePage() {
   const internalLink = user ? '/dashboard' : '/login';
 
   return (
-    <div className="min-h-dvh overflow-y-auto bg-[#f5f7fb] text-slate-900">
+    <div className="min-h-dvh bg-[#f5f7fb] text-slate-900">
       <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3 sm:px-8">
           <Link to="/" aria-label="SIPEC-MLA, inicio" className="flex min-w-0 items-center gap-3">
