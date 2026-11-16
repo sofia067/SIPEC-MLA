@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Sidebar from '../components/sidebar';
 import UserDropdown from '../components/UserDropdown';
@@ -23,6 +23,7 @@ export default function ValidacionOCR() {
   const [referencias, setReferencias] = useState({ requests: [], workers: [], candidates: [] });
   const [documentos, setDocumentos] = useState([]);
   const [documentoActual, setDocumentoActual] = useState(null);
+  const resultadoRef = useRef(null);
   const [tipoVinculo, setTipoVinculo] = useState('candidate');
   const [idVinculo, setIdVinculo] = useState('');
   const [tipoDocumento, setTipoDocumento] = useState(TIPOS_DOCUMENTO[0]);
@@ -187,6 +188,11 @@ export default function ValidacionOCR() {
     } finally {
       setActualizandoDocumento(false);
     }
+  };
+
+  const mostrarResultado = (documento) => {
+    setDocumentoActual(documento);
+    resultadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const marcarCvRevisado = async () => {
@@ -445,7 +451,7 @@ export default function ValidacionOCR() {
             </form>
             )}
 
-            <section className={`${canManageDocuments ? 'lg:col-span-2' : 'lg:col-span-3'} bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 text-xs`}>
+            <section ref={resultadoRef} className={`${canManageDocuments ? 'lg:col-span-2' : 'lg:col-span-3'} scroll-mt-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 text-xs`}>
               <h3 className="font-bold text-sm text-gray-800 border-b pb-2">Texto extraído y huella del archivo</h3>
               {!documentoActual && (
                 <p className="py-10 text-center text-gray-500">Selecciona un documento del historial para ver OCR y hash SHA-256.</p>
@@ -553,6 +559,13 @@ export default function ValidacionOCR() {
                   {documentoActual.ocr_message && (
                     <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{documentoActual.ocr_message}</p>
                   )}
+                  {documentoActual.file_mime === 'application/pdf'
+                    && documentoActual.ocr_status === 'failed'
+                    && /invalid pdf structure/i.test(documentoActual.ocr_message ?? '') && (
+                      <p className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-950">
+                        El archivo no tiene una estructura PDF válida. Descarga y vuelve a exportar el documento original como PDF; cambiarle la extensión no lo convierte en un PDF válido. Después, carga el archivo corregido para procesarlo.
+                      </p>
+                  )}
                   {documentoActual.ocr_status === 'processing' && (
                     <p className="animate-pulse py-6 text-center font-semibold text-blue-950">Procesando documento...</p>
                   )}
@@ -573,6 +586,14 @@ export default function ValidacionOCR() {
                     <p className="rounded bg-amber-50 p-3 text-amber-900">El OCR no reconoció texto legible. Revisa la calidad o la orientación del documento.</p>
                   )}
                   {canManageDocuments && <div className="flex flex-wrap gap-3 border-t pt-4">
+                    {documentoActual.has_file && (
+                      <a
+                        href={`/api/documents/${documentoActual.id}/file`}
+                        className="rounded-lg border border-gray-300 px-4 py-2 font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Descargar archivo original
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={validarDocumento}
@@ -650,7 +671,12 @@ export default function ValidacionOCR() {
                       {document.file_sha256 || '—'}
                     </td>
                     <td className="py-3">
-                      <button type="button" onClick={() => setDocumentoActual(document)} className="font-semibold text-blue-900 hover:underline">
+                      <button
+                        type="button"
+                        onClick={() => mostrarResultado(document)}
+                        aria-pressed={documentoActual?.id === document.id}
+                        className={`font-semibold hover:underline ${documentoActual?.id === document.id ? 'text-blue-950 underline' : 'text-blue-900'}`}
+                      >
                         Ver resultado
                       </button>
                     </td>

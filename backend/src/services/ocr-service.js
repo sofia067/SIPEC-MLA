@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { env } from '../config/env.js';
 
