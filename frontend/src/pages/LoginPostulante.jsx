@@ -100,7 +100,7 @@ export default function LoginPostulante() {
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500 border-t pt-4">
-            ¿Eres parte del personal interno? <Link to="/" className="font-semibold text-blue-800 hover:underline">Acceso institucional</Link>
+            ¿Eres parte del personal interno? <Link to="/login" className="font-semibold text-blue-800 hover:underline">Acceso institucional</Link>
           </p>
         </div>
       </section>

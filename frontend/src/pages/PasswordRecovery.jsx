@@ -59,7 +59,7 @@ export default function PasswordRecovery() {
             {sending ? 'Enviando…' : 'Enviar solicitud al administrador'}
           </button>
         </form>
-        <Link to="/" className="mt-5 inline-block text-sm font-semibold text-blue-800 hover:underline">
+        <Link to="/login" className="mt-5 inline-block text-sm font-semibold text-blue-800 hover:underline">
           Volver al inicio de sesión
         </Link>
       </section>

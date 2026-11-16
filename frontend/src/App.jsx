@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import HomePage from './pages/HomePage';
 import Login from './pages/Login';
 import PortalPostulante from './pages/PortalPostulante';
 import LoginPostulante from './pages/LoginPostulante';
@@ -35,7 +36,8 @@ function App() {
       <CandidateAuthProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<Login />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/postulante/login" element={<LoginPostulante />} />
           <Route path="/recuperar-contrasena" element={<PasswordRecovery />} />
           <Route path="/postular" element={<PortalPostulacion />} />

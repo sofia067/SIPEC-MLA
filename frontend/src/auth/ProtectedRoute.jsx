@@ -8,5 +8,5 @@ export default function ProtectedRoute({ children }) {
     return <div className="p-8 text-center text-sm text-gray-600">Verificando sesión...</div>;
   }
 
-  return user ? children : <Navigate to="/" replace />;
+  return user ? children : <Navigate to="/login" replace />;
 }

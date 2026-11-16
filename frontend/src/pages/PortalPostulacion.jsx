@@ -193,7 +193,7 @@ export default function PortalPostulacion() {
               <p className="text-xs text-blue-200">Convocatorias de Recursos Humanos</p>
             </div>
           </div>
-          <Link to="/" className="rounded-lg px-3 py-2 text-sm font-medium text-blue-100 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+          <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-blue-100 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
             Acceso institucional
           </Link>
         </div>
