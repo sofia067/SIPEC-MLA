@@ -177,7 +177,7 @@ export function createPublicApplicationRouter() {
       };
       let resumeText;
       try {
-        resumeText = await extractText(resumeFile.path, 'application/pdf');
+        resumeText = await extractText(resumeBuffer, 'application/pdf');
       } catch (error) {
         console.error('No se pudo extraer texto para calcular el match del CV:', error);
       }

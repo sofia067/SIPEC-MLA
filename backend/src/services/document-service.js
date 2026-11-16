@@ -3,7 +3,7 @@ import { readFile, unlink } from 'node:fs/promises';
 import { AppError } from '../errors/app-error.js';
 import { modulesRepository } from '../repositories/modules-repository.js';
 import { assessDocumentReview } from './document-review.js';
-import { extractPdfMetadata, extractText, isSupportedMime } from './ocr-service.js';
+import { extractPdfMetadata, extractTextFromFile, isSupportedMime } from './ocr-service.js';
 
 async function processOcr(id, filePath, mime) {
   await modulesRepository.setDocumentOcrResult(id, { status: 'processing', text: null, message: null });
@@ -19,7 +19,7 @@ async function processOcr(id, filePath, mime) {
 
   let text;
   try {
-    text = (await extractText(filePath, mime))?.trim() ?? '';
+    text = (await extractTextFromFile(filePath, mime))?.trim() ?? '';
     if (!text) {
       await modulesRepository.setDocumentOcrResult(id, {
         status: 'no_text',

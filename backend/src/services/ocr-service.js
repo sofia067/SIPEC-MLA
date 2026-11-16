@@ -101,3 +101,7 @@ export function extractText(buffer, mime) {
   );
   return task;
 }
+
+export async function extractTextFromFile(filePath, mime) {
+  return extractText(await readFile(filePath), mime);
+}

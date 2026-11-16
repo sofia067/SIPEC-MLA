@@ -10,7 +10,7 @@ import { requestRepository } from '../repositories/request-repository.js';
 import { hashPassword } from '../security/password.js';
 import { candidateAuthService } from '../services/candidate-auth-service.js';
 import { documentService } from '../services/document-service.js';
-import { extractPdfMetadata, extractText } from '../services/ocr-service.js';
+import { extractPdfMetadata, extractTextFromFile } from '../services/ocr-service.js';
 import { assessDocumentReview } from '../services/document-review.js';
 import { scoreResumeMatch } from '../services/match-scoring.js';
 import {
@@ -352,7 +352,7 @@ export function createModuleRouter() {
 
       let extractedText;
       try {
-        extractedText = await extractText(candidate.resume_file_path, candidate.resume_file_mime);
+        extractedText = await extractTextFromFile(candidate.resume_file_path, candidate.resume_file_mime);
       } catch (error) {
         console.error('No se pudo extraer texto para la revisión ciega del CV:', error);
         throw new AppError(422, 'RESUME_EXTRACTION_FAILED', 'No se pudo leer el CV. Verifica el archivo e inténtalo nuevamente.');
@@ -469,7 +469,7 @@ export function createModuleRouter() {
 
       let resumeText;
       try {
-        resumeText = await extractText(candidate.resume_file_path, candidate.resume_file_mime);
+        resumeText = await extractTextFromFile(candidate.resume_file_path, candidate.resume_file_mime);
       } catch (error) {
         console.error('No se pudo extraer texto para calcular el match del CV:', error);
         throw new AppError(422, 'MATCH_EXTRACTION_FAILED', 'No se pudo leer el CV. Verifica el archivo e inténtalo nuevamente.');
