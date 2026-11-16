@@ -325,9 +325,38 @@ export default function PortalPostulacion() {
                   <p className="mt-1">El equipo de Recursos Humanos publicará aquí las convocatorias vigentes.</p>
                 </div>
               ) : !privacyNotice?.enabled ? (
-                <div role="alert" className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
-                  <p className="font-semibold">El portal aún no está habilitado para recibir postulaciones.</p>
-                  <p className="mt-1">Recursos Humanos debe configurar el aviso de privacidad aprobado antes de recopilar datos personales o documentos.</p>
+                <div className="mt-6 space-y-4">
+                  <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+                    <p className="font-semibold">El portal aún no está habilitado para recibir postulaciones.</p>
+                    <p className="mt-1">Puedes consultar las convocatorias publicadas. Recursos Humanos debe configurar el aviso de privacidad aprobado antes de recopilar datos personales o documentos.</p>
+                  </div>
+                  <section aria-label="Convocatorias publicadas" className="space-y-3">
+                    {openings.map((opening) => (
+                      <article key={opening.id} className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-bold text-blue-950">{opening.position_title}</h3>
+                            <p className="mt-1 text-xs text-slate-600">{opening.department} · {opening.code}</p>
+                          </div>
+                          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-900">
+                            {tiempoRestanteLabel(opening.application_deadline)}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-xs font-semibold text-slate-700">
+                          Postulación: {fechaLabel(opening.application_start_date)} al {fechaLabel(opening.application_deadline)}
+                        </p>
+                        {opening.description && <p className="mt-3 leading-relaxed text-slate-700">{opening.description}</p>}
+                        {(opening.education || opening.general_experience || opening.specific_experience || opening.technical_knowledge) && (
+                          <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                            {opening.education && <div><dt className="font-bold text-slate-800">Formación</dt><dd className="text-slate-600">{opening.education}</dd></div>}
+                            {opening.general_experience && <div><dt className="font-bold text-slate-800">Experiencia general</dt><dd className="text-slate-600">{opening.general_experience}</dd></div>}
+                            {opening.specific_experience && <div><dt className="font-bold text-slate-800">Experiencia específica</dt><dd className="text-slate-600">{opening.specific_experience}</dd></div>}
+                            {opening.technical_knowledge && <div><dt className="font-bold text-slate-800">Conocimientos</dt><dd className="text-slate-600">{Array.isArray(opening.technical_knowledge) ? opening.technical_knowledge.join(', ') : opening.technical_knowledge}</dd></div>}
+                          </dl>
+                        )}
+                      </article>
+                    ))}
+                  </section>
                 </div>
               ) : (
                 <form onSubmit={submitApplication} className="mt-6 space-y-5">
@@ -362,7 +391,7 @@ export default function PortalPostulacion() {
                             {selectedOpening.education && <div><dt className="font-bold">Formación</dt><dd>{selectedOpening.education}</dd></div>}
                             {selectedOpening.general_experience && <div><dt className="font-bold">Experiencia general</dt><dd>{selectedOpening.general_experience}</dd></div>}
                             {selectedOpening.specific_experience && <div><dt className="font-bold">Experiencia específica</dt><dd>{selectedOpening.specific_experience}</dd></div>}
-                            {selectedOpening.technical_knowledge && <div><dt className="font-bold">Conocimientos</dt><dd>{selectedOpening.technical_knowledge}</dd></div>}
+                            {selectedOpening.technical_knowledge && <div><dt className="font-bold">Conocimientos</dt><dd>{Array.isArray(selectedOpening.technical_knowledge) ? selectedOpening.technical_knowledge.join(', ') : selectedOpening.technical_knowledge}</dd></div>}
                           </dl>
                         )}
                       </div>
