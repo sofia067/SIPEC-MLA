@@ -17,7 +17,7 @@ const workerSelect = `
 `;
 
 const profileSelect = `
-  SELECT p.id, p.title, p.description, p.level, p.principal_requirements,
+  SELECT p.id, p.title, p.description, p.level, p.labor_regime, p.principal_requirements,
          p.profile_code, p.remuneration, p.education, p.general_experience,
          p.specific_experience, p.technical_knowledge,
          p.functions,
@@ -90,6 +90,7 @@ export const modulesRepository = {
     return {
       departments: areaNames.map((name) => ({ id: departmentIds.get(name.toLocaleLowerCase()) ?? null, name })),
       catalogData: {
+        laborRegimes: catalogData.laborRegimes ?? [],
         positionLevels: catalogData.positionLevels ?? [],
         educationLevels: catalogData.educationLevels ?? [],
       },
@@ -174,12 +175,12 @@ export const modulesRepository = {
       );
       const profile = await client.query(
         `INSERT INTO position_profiles
-           (department_id, title, description, level, principal_requirements, status,
+           (department_id, title, description, level, labor_regime, principal_requirements, status,
             profile_code, remuneration, education, general_experience, specific_experience,
             technical_knowledge, functions)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING id`,
-        [department.rows[0].id, input.title, input.description, input.level,
+        [department.rows[0].id, input.title, input.description, input.level, input.laborRegime,
           input.principalRequirements, input.status, input.profileCode || null,
           input.remuneration, input.education, input.generalExperience,
           input.specificExperience, input.technicalKnowledge.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
@@ -206,12 +207,12 @@ export const modulesRepository = {
       );
       const result = await client.query(
         `UPDATE position_profiles SET department_id = $2, title = $3, description = $4,
-           level = $5, principal_requirements = $6, status = $7, profile_code = $8,
-           remuneration = $9, education = $10, general_experience = $11,
-           specific_experience = $12, technical_knowledge = $13, functions = $14,
+           level = $5, labor_regime = $6, principal_requirements = $7, status = $8, profile_code = $9,
+           remuneration = $10, education = $11, general_experience = $12,
+           specific_experience = $13, technical_knowledge = $14, functions = $15,
            updated_at = now()
          WHERE id = $1 RETURNING id`,
-        [id, department.rows[0].id, input.title, input.description, input.level,
+        [id, department.rows[0].id, input.title, input.description, input.level, input.laborRegime,
           input.principalRequirements, input.status, input.profileCode || null,
           input.remuneration, input.education, input.generalExperience,
           input.specificExperience, input.technicalKnowledge.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),

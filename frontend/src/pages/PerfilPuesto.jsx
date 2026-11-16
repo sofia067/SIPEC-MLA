@@ -9,6 +9,7 @@ const emptyProfile = {
   title: '',
   department: '',
   level: '',
+  laborRegime: '',
   profileCode: '',
   remuneration: '',
   education: '',
@@ -42,7 +43,7 @@ export default function PerfilPuesto() {
   const { user } = useAuth();
   const puedeGestionarPerfiles = ['admin', 'hr_specialist'].includes(user?.role);
   const [profiles, setProfiles] = useState([]);
-  const [lookupData, setLookupData] = useState({ departments: [], catalogData: { positionLevels: [], educationLevels: [] } });
+  const [lookupData, setLookupData] = useState({ departments: [], catalogData: { laborRegimes: [], positionLevels: [], educationLevels: [] } });
   const [areaFilter, setAreaFilter] = useState('Todas');
   const [search, setSearch] = useState('');
   const [form, setForm] = useState(emptyProfile);
@@ -84,6 +85,7 @@ export default function PerfilPuesto() {
           title: form.title,
           department: form.department,
           level: form.level,
+          laborRegime: form.laborRegime,
           profileCode: form.profileCode,
           remuneration: form.remuneration,
           education: form.education,
@@ -242,6 +244,13 @@ export default function PerfilPuesto() {
                   <select required value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900">
                     <option value="">Selecciona un área</option>
                     {lookupData.departments.map((department) => <option key={department.name} value={department.name}>{department.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Régimen laboral
+                  <select required value={form.laborRegime} onChange={(event) => setForm({ ...form, laborRegime: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900">
+                    <option value="">Selecciona un régimen</option>
+                    {lookupData.catalogData.laborRegimes.map((regime) => <option key={regime} value={regime}>{regime}</option>)}
                   </select>
                 </label>
                 <label className="block text-sm font-medium text-gray-700">

@@ -40,6 +40,7 @@ const profileSchema = z.object({
   title: nonEmptyText(160),
   department: nonEmptyText(160),
   level: nonEmptyText(80),
+  laborRegime: nonEmptyText(40),
   principalRequirements: z.string().trim().max(4000).default(''),
   description: z.string().trim().max(4000).default(''),
   profileCode: z.string().trim().max(40).default(''),

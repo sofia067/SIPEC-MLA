@@ -26,7 +26,7 @@ Abre la dirección que muestre Vite (por defecto `http://localhost:5173`). Duran
 
 El inicio de sesión, el resumen, las convocatorias de personal, el padrón de trabajadores, los perfiles de puesto y la validación documental consultan la API. La validación extrae texto de imágenes y PDFs; los PDFs escaneados procesan como máximo 20 páginas. Cada archivo conserva una huella SHA-256. Las pantallas también requieren una sesión válida. Para comprobar el backend, abre `http://localhost:3000/api/health/live`; para comprobar la conexión a PostgreSQL, usa `http://localhost:3000/api/health/ready`.
 
-Las fichas de puesto guardan código, unidad orgánica, nivel, remuneración, formación, experiencia, conocimientos, competencias y funciones. Ejecuta `npm run db:migrate` para aplicar la migración de estos campos. Desde el listado se pueden desactivar perfiles; se conservan en la base de datos y no se eliminan físicamente.
+Las fichas de puesto guardan código, unidad orgánica, régimen laboral, nivel, remuneración, formación, experiencia, conocimientos, competencias y funciones. Ejecuta `npm run db:migrate` para aplicar la migración de estos campos. Desde el listado se pueden desactivar perfiles; se conservan en la base de datos y no se eliminan físicamente.
 
 Las convocatorias de personal guardan prioridad alta, media o baja; las solicitudes anteriores a esta migración reciben prioridad media por defecto. Ejecuta `npm run db:migrate` para aplicar los cambios de esquema. Las convocatorias pendientes pueden ser editadas o eliminadas por administradores y especialistas de RR.HH.; la eliminación requiere que no tengan documentos, evaluaciones ni asignaciones asociadas.
 

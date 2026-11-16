@@ -20,6 +20,7 @@ function toForm(profile) {
     title: profile.title || '',
     department: profile.department || '',
     level: profile.level || '',
+    laborRegime: profile.labor_regime || '',
     profileCode: profile.profile_code || '',
     remuneration: profile.remuneration ?? '',
     education: profile.education || '',
@@ -33,15 +34,15 @@ function toForm(profile) {
   };
 }
 
-function Field({ label, value, onChange, rows = 1, type = 'text', step }) {
+function Field({ label, value, onChange, rows = 1, type = 'text', step, required = false }) {
   const inputClass = 'mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm';
   return (
     <label className="block text-sm font-medium text-gray-700">
       {label}
       {rows > 1 ? (
-        <textarea className={inputClass} rows={rows} value={value} onChange={onChange} />
+        <textarea className={inputClass} rows={rows} value={value} onChange={onChange} required={required} />
       ) : (
-        <input className={inputClass} type={type} step={step} value={value} onChange={onChange} />
+        <input className={inputClass} type={type} step={step} value={value} onChange={onChange} required={required} />
       )}
     </label>
   );
@@ -108,6 +109,7 @@ export default function PerfilPuestoDetalle() {
           title: form.title,
           department: form.department,
           level: form.level,
+          laborRegime: form.laborRegime,
           profileCode: form.profileCode,
           remuneration: form.remuneration,
           education: form.education,
@@ -192,6 +194,7 @@ export default function PerfilPuestoDetalle() {
                     {editing ? (
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <Field label="Área / unidad orgánica" value={form.department} onChange={(event) => updateField('department', event.target.value)} />
+                        <Field label="Régimen laboral" required value={form.laborRegime} onChange={(event) => updateField('laborRegime', event.target.value)} />
                         <Field label="Código del perfil" value={form.profileCode} onChange={(event) => updateField('profileCode', event.target.value)} />
                       </div>
                     ) : (
@@ -306,6 +309,7 @@ export default function PerfilPuestoDetalle() {
                       ) : (
                         <>
                           <ReadField label="Código" value={profile.profile_code} />
+                          <ReadField label="Régimen laboral" value={profile.labor_regime} />
                           <ReadField label="Nivel / grupo" value={profile.level} />
                           <ReadField label="Remuneración referencial" value={profile.remuneration == null ? '' : formatMoney(profile.remuneration)} />
                         </>
